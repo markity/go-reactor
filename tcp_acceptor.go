@@ -9,19 +9,29 @@ import (
 type newConnectionCallback func(socketfd int, peerAddr netip.AddrPort)
 
 type tcpAcceptor struct {
+	// event loop
 	loop eventloop.EventLoop
 
-	// only be used for prevent double start
+	// be used to prevent double start
 	listening bool
 
-	listenAddr            netip.AddrPort
-	socketChannel         eventloop.Channel
+	// listen at
+	listenAddr netip.AddrPort
+
+	// listen socket fd channel
+	socketChannel eventloop.Channel
+
+	// new connection call back
 	newConnectionCallback newConnectionCallback
 
+	// syscall.Listen param, see man 2 listen()
+	// The backlog argument defines the maximum length to which the queue of pending connections for sockfd may grow.  If a  connection  request  arrives  when  the
+	// queue  is full, the client may receive an error with an indication of ECONNREFUSED or, if the underlying protocol supports retransmission, the request may be
+	// ignored so that a later reattempt at connection succeeds.
 	listenBackup int
 }
 
-func newTCPAcceptor(loop eventloop.EventLoop, listenAddr netip.AddrPort) *tcpAcceptor {
+func newTCPAcceptor(loop eventloop.EventLoop, listenAddr netip.AddrPort, listenBackup int) *tcpAcceptor {
 	socketFD, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
 	if err != nil {
 		panic(err)
@@ -34,8 +44,8 @@ func newTCPAcceptor(loop eventloop.EventLoop, listenAddr netip.AddrPort) *tcpAcc
 		listenAddr:            listenAddr,
 		listening:             false,
 		socketChannel:         c,
-		newConnectionCallback: func(socketfd int, peerAddr netip.AddrPort) {},
-		listenBackup:          1024,
+		newConnectionCallback: defaultNewConnectionCallback,
+		listenBackup:          listenBackup,
 	}
 	c.SetReadCallback(acc.HandleRead)
 
@@ -87,4 +97,8 @@ func (ac *tcpAcceptor) HandleRead() {
 
 func (ac *tcpAcceptor) SetNewConnectionCallback(cb newConnectionCallback) {
 	ac.newConnectionCallback = cb
+}
+
+func defaultNewConnectionCallback(socketfd int, peerAddr netip.AddrPort) {
+	syscall.Close(socketfd)
 }

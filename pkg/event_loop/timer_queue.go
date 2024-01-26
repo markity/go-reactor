@@ -13,14 +13,19 @@ type itimerspec struct {
 	it_value    syscall.Timespec
 }
 
-// 为了区分一个时间戳不同
+// timer entry
 type timerHeapEntry struct {
-	timerId   int
+	// id will be used to cancel timer
+	timerId int
+	// first trigger timepoint
 	TimeStamp time.Time
-	onTimer   func()
-	interval  time.Duration
+	// callback function
+	onTimer func()
+	// if interval is 0, only trigger once
+	interval time.Duration
 }
 
+// implement container.Heap interface
 type timerHeap []timerHeapEntry
 
 func (th *timerHeap) Len() int {
@@ -52,11 +57,14 @@ func (th *timerHeap) Pop() interface{} {
 }
 
 type timerQueue struct {
-	timerChannel   Channel
-	timerFD        int
+	// timerfd's channel
+	timerChannel Channel
+	// each timer has an unique index, use counter
 	timerIdCounter int
-	heap           timerHeap
-	loop           EventLoop
+	// timer array, but uses container.Heap interface to insert
+	heap timerHeap
+	// eventloop
+	loop EventLoop
 }
 
 func newTimerQueue(loop EventLoop) *timerQueue {
@@ -69,7 +77,6 @@ func newTimerQueue(loop EventLoop) *timerQueue {
 	ch := NewChannel(int(timerfd))
 	ch.SetEvent(ReadableEvent)
 	tq := timerQueue{
-		timerFD:        int(timerfd),
 		timerChannel:   ch,
 		timerIdCounter: 0,
 		heap:           make(timerHeap, 0),
@@ -78,6 +85,7 @@ func newTimerQueue(loop EventLoop) *timerQueue {
 	heap.Init(&tq.heap)
 	loop.UpdateChannelInLoopGoroutine(ch)
 
+	// read callback consumes content in timerfd and call getExpired() to execute callbakcs
 	ch.SetReadCallback(func() {
 		_, err := syscall.Read(int(timerfd), make([]byte, 8))
 		if err != nil {
@@ -92,9 +100,10 @@ func newTimerQueue(loop EventLoop) *timerQueue {
 	return &tq
 }
 
+// create a new timer, returns its id
 func (tq *timerQueue) AddTimer(triggerAt time.Time, interval time.Duration, f func()) int {
-	id := tq.timerIdCounter
 	tq.timerIdCounter++
+	id := tq.timerIdCounter
 	heap.Push(&tq.heap, timerHeapEntry{
 		timerId:   id,
 		TimeStamp: triggerAt,
@@ -104,6 +113,7 @@ func (tq *timerQueue) AddTimer(triggerAt time.Time, interval time.Duration, f fu
 
 	nsec := 0
 
+	// if trigger point alreay passed, nsec is 0, timerfd will be readable right now
 	now := time.Now()
 	earliest := tq.heap[0].TimeStamp
 	if now.Before(earliest) {
@@ -121,7 +131,7 @@ func (tq *timerQueue) AddTimer(triggerAt time.Time, interval time.Duration, f fu
 	}
 
 	// 1 means TFD_TIMER_ABSTIME, see timerfd_setime(2)
-	_, _, errno := syscall.Syscall6(syscall.SYS_TIMERFD_SETTIME, uintptr(tq.timerFD), 2, uintptr(unsafe.Pointer(&sp)), 0, 0, 0)
+	_, _, errno := syscall.Syscall6(syscall.SYS_TIMERFD_SETTIME, uintptr(tq.timerChannel.GetFD()), 2, uintptr(unsafe.Pointer(&sp)), 0, 0, 0)
 	if errno != 0 {
 		panic(errno)
 	}
@@ -129,6 +139,8 @@ func (tq *timerQueue) AddTimer(triggerAt time.Time, interval time.Duration, f fu
 	return id
 }
 
+// cancel timer by its'id
+// TODO: O(N) but it can have better performance
 func (tq *timerQueue) CancelTimer(timerId int) bool {
 	newHeap := make([]timerHeapEntry, 0)
 	ok := false
@@ -143,6 +155,7 @@ func (tq *timerQueue) CancelTimer(timerId int) bool {
 	return ok
 }
 
+// get expired entries
 func (tq *timerQueue) getExpired() []timerHeapEntry {
 	te := make([]timerHeapEntry, 0)
 	now := time.Now()
@@ -155,6 +168,7 @@ func (tq *timerQueue) getExpired() []timerHeapEntry {
 		if minOne.TimeStamp.Before(now) {
 			te = append(te, tq.heap[0])
 			heap.Pop(&tq.heap)
+			// if interval is not 0, reset its timestamp and push it back
 			if minOne.interval != 0 {
 				minOne.TimeStamp = minOne.TimeStamp.Add(minOne.interval)
 				heap.Push(&tq.heap, minOne)
@@ -164,6 +178,7 @@ func (tq *timerQueue) getExpired() []timerHeapEntry {
 		}
 	}
 
+	// reset the timerfd, set it to the earliest one
 	if tq.heap.Len() != 0 {
 		nsec := 0
 
@@ -184,7 +199,7 @@ func (tq *timerQueue) getExpired() []timerHeapEntry {
 		}
 
 		// 1 means TFD_TIMER_ABSTIME, see timerfd_setime(2)
-		_, _, errno := syscall.Syscall6(syscall.SYS_TIMERFD_SETTIME, uintptr(tq.timerFD), 2, uintptr(unsafe.Pointer(&sp)), 0, 0, 0)
+		_, _, errno := syscall.Syscall6(syscall.SYS_TIMERFD_SETTIME, uintptr(tq.timerChannel.GetFD()), 2, uintptr(unsafe.Pointer(&sp)), 0, 0, 0)
 		if errno != 0 {
 			panic(errno)
 		}

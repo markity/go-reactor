@@ -1,9 +1,9 @@
 package goreactor
 
 import (
+	"fmt"
 	"go-reactor/pkg/buffer"
 	eventloop "go-reactor/pkg/event_loop"
-	"log"
 	"net/netip"
 	"syscall"
 )
@@ -17,13 +17,26 @@ const (
 	Disconnected  tcpConnectionState = 4
 )
 
-type closeCallbackFunc func(*TCPConnection)
-type HighWaterCallbackFunc func(*TCPConnection, int)
-type WriteCompleteCallbackFunc func(*TCPConnection)
-type DisConnectedCallbackFunc func(*TCPConnection)
+type TCPConnection interface {
+	SetDisConnectedCallback(f DisConnectedCallbackFunc)
+	SetHighWaterCallback(f HighWaterCallbackFunc)
+	SetWriteCompleteCallback(f WriteCompleteCallbackFunc)
+	Send(bs []byte)
+	ShutdownWrite()
+	GetRemoteAddrPort() netip.AddrPort
+	ForceClose()
+	SetKeepAlive(b bool)
+	SetNoDelay(b bool)
+	GetEventLoop() eventloop.EventLoop
+}
+
+type closeCallbackFunc func(TCPConnection)
+type HighWaterCallbackFunc func(TCPConnection, int)
+type WriteCompleteCallbackFunc func(TCPConnection)
+type DisConnectedCallbackFunc func(TCPConnection)
 
 // 能被多个协程share
-type TCPConnection struct {
+type tcpConnection struct {
 	state tcpConnectionState
 
 	loop eventloop.EventLoop
@@ -46,42 +59,38 @@ type TCPConnection struct {
 	inputBuffer  buffer.Buffer
 }
 
-func (tc *TCPConnection) setConnectedCallback(f ConnectedCallbackFunc) {
+func (tc *tcpConnection) setConnectedCallback(f ConnectedCallbackFunc) {
 	tc.connectedCallback = f
 }
 
-func (tc *TCPConnection) setDisConnectedCallback(f DisConnectedCallbackFunc) {
-	tc.disconnectedCallback = f
-}
-
-func (tc *TCPConnection) setCloseCallback(f closeCallbackFunc) {
+func (tc *tcpConnection) setCloseCallback(f closeCallbackFunc) {
 	tc.closeCallback = f
 }
 
-func (tc *TCPConnection) setMessageCallback(f MessageCallbackFunc) {
+func (tc *tcpConnection) setMessageCallback(f MessageCallbackFunc) {
 	tc.messageCallback = f
 }
 
-func (tc *TCPConnection) SetHighWaterCallback(f HighWaterCallbackFunc) {
+func (tc *tcpConnection) SetHighWaterCallback(f HighWaterCallbackFunc) {
 	tc.highWaterCallback = f
 }
 
 // 0 means infinite
-func (tc *TCPConnection) SetHighWaterLevel(i int) {
+func (tc *tcpConnection) SetHighWaterLevel(i int) {
 	tc.hignWaterLevel = i
 }
 
-func (tc *TCPConnection) SetWriteCompleteCallback(f WriteCompleteCallbackFunc) {
+func (tc *tcpConnection) SetWriteCompleteCallback(f WriteCompleteCallbackFunc) {
 	tc.writeCompleteCallback = f
 }
 
-func (tc *TCPConnection) SetDisConnectedCallback(f DisConnectedCallbackFunc) {
+func (tc *tcpConnection) SetDisConnectedCallback(f DisConnectedCallbackFunc) {
 	tc.disconnectedCallback = f
 }
 
-func newConnection(loop eventloop.EventLoop, sockFD int, remoteAddrPort netip.AddrPort) *TCPConnection {
+func newConnection(loop eventloop.EventLoop, sockFD int, remoteAddrPort netip.AddrPort) *tcpConnection {
 	channel := eventloop.NewChannel(sockFD)
-	c := &TCPConnection{
+	c := &tcpConnection{
 		state:                 Connecting,
 		loop:                  loop,
 		socketChannel:         channel,
@@ -101,7 +110,7 @@ func newConnection(loop eventloop.EventLoop, sockFD int, remoteAddrPort netip.Ad
 	return c
 }
 
-func (conn *TCPConnection) Send(bs []byte) {
+func (conn *tcpConnection) Send(bs []byte) {
 	copyBs := make([]byte, len(bs))
 	copy(copyBs, bs)
 	conn.loop.RunInLoop(func() {
@@ -118,7 +127,7 @@ func (conn *TCPConnection) Send(bs []byte) {
 	})
 }
 
-func (conn *TCPConnection) Shutdown() {
+func (conn *tcpConnection) ShutdownWrite() {
 	conn.loop.RunInLoop(func() {
 		if conn.state == Connected {
 			conn.state = Disconnecting
@@ -127,11 +136,11 @@ func (conn *TCPConnection) Shutdown() {
 	})
 }
 
-func (conn *TCPConnection) GetRemoteAddrPort() netip.AddrPort {
+func (conn *tcpConnection) GetRemoteAddrPort() netip.AddrPort {
 	return conn.remoteAddrPort
 }
 
-func (conn *TCPConnection) ForceClose() {
+func (conn *tcpConnection) ForceClose() {
 	conn.loop.RunInLoop(func() {
 		if conn.state == Disconnecting || conn.state == Connected {
 			conn.handleClose()
@@ -139,7 +148,7 @@ func (conn *TCPConnection) ForceClose() {
 	})
 }
 
-func (conn *TCPConnection) SetKeepAlive(b bool) {
+func (conn *tcpConnection) SetKeepAlive(b bool) {
 	conn.loop.RunInLoop(func() {
 		val := 0
 		if b {
@@ -149,7 +158,7 @@ func (conn *TCPConnection) SetKeepAlive(b bool) {
 	})
 }
 
-func (conn *TCPConnection) SetNoDelay(b bool) {
+func (conn *tcpConnection) SetNoDelay(b bool) {
 	conn.loop.RunInLoop(func() {
 		val := 0
 		if b {
@@ -159,23 +168,18 @@ func (conn *TCPConnection) SetNoDelay(b bool) {
 	})
 }
 
-func (conn *TCPConnection) handleRead() {
+func (conn *tcpConnection) handleRead() {
 	n := conn.inputBuffer.ReadFD(conn.socketChannel.GetFD())
 	if n > 0 {
 		conn.messageCallback(conn, conn.inputBuffer)
 	} else if n == 0 {
 		// n为0意味对面已经close write或close total了, 此时直接关闭连接
 		conn.handleClose()
-	} else {
-		panic("checkme")
 	}
 }
 
-func (conn *TCPConnection) handleWrite() {
-	n, err := syscall.Write(conn.socketChannel.GetFD(), conn.outputBuffer.Peek()[:conn.outputBuffer.ReadableBytes()])
-	if err != nil {
-		log.Printf("syscall.Write socket: %v\n", err)
-	}
+func (conn *tcpConnection) handleWrite() {
+	n, _ := syscall.Write(conn.socketChannel.GetFD(), conn.outputBuffer.Peek()[:conn.outputBuffer.ReadableBytes()])
 	conn.outputBuffer.Retrieve(n)
 	if conn.outputBuffer.ReadableBytes() == 0 {
 		conn.socketChannel.DisableWrite()
@@ -185,12 +189,12 @@ func (conn *TCPConnection) handleWrite() {
 	}
 }
 
-func (conn *TCPConnection) handleError() {
-	log.Println("handle error")
+func (conn *tcpConnection) handleError() {
+	fmt.Println("error")
 }
 
 // 比如对端直接close了socket, 那么此时就进入readhup状态了
-func (conn *TCPConnection) handleClose() {
+func (conn *tcpConnection) handleClose() {
 	if conn.state != Disconnecting && conn.state != Connected {
 		panic("checkme")
 	}
@@ -202,7 +206,7 @@ func (conn *TCPConnection) handleClose() {
 	conn.disconnectedCallback(conn)
 }
 
-func (conn *TCPConnection) establishConn() {
+func (conn *tcpConnection) establishConn() {
 	if conn.state != Connecting {
 		panic("unexpected")
 	}
@@ -212,14 +216,18 @@ func (conn *TCPConnection) establishConn() {
 	conn.connectedCallback(conn)
 }
 
-func defaultHighWaterMarkCallback(tc *TCPConnection, sz int) {
+func (conn *tcpConnection) GetEventLoop() eventloop.EventLoop {
+	return conn.loop
+}
+
+func defaultHighWaterMarkCallback(tc TCPConnection, sz int) {
 	// just do nothing
 }
 
-func defaultWriteCompleteCallback(tc *TCPConnection) {
+func defaultWriteCompleteCallback(tc TCPConnection) {
 	// just do nothing
 }
 
-func defaultDisConnectedCallback(tc *TCPConnection) {
+func defaultDisConnectedCallback(tc TCPConnection) {
 	// just do nothing
 }

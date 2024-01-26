@@ -6,6 +6,7 @@ import (
 	"strconv"
 )
 
+// get goroutine id
 func getGid() (gid uint64) {
 	b := make([]byte, 64)
 	b = b[:runtime.Stack(b, false)]

@@ -6,8 +6,14 @@ import (
 	"net/netip"
 )
 
-type ConnectedCallbackFunc func(*TCPConnection)
-type MessageCallbackFunc func(*TCPConnection, buffer.Buffer)
+type TCPServer interface {
+	SetConnectionCallback(f ConnectedCallbackFunc)
+	SetMessageCallback(f MessageCallbackFunc)
+	Start() error
+}
+
+type ConnectedCallbackFunc func(TCPConnection)
+type MessageCallbackFunc func(TCPConnection, buffer.Buffer)
 
 type tcpServer struct {
 	loop eventloop.EventLoop
@@ -22,7 +28,9 @@ type tcpServer struct {
 	connectedCallback ConnectedCallbackFunc
 	msgCallback       MessageCallbackFunc
 
-	connections map[int]*TCPConnection
+	evloopPoll *eventloopGoroutinePoll
+
+	loadBalanceStrategy LoadBalanceStrategy
 }
 
 func (server *tcpServer) SetConnectionCallback(f ConnectedCallbackFunc) {
@@ -43,47 +51,63 @@ func (server *tcpServer) Start() error {
 		return err
 	}
 
+	server.evloopPoll.start()
+
 	server.started = true
 
 	return nil
 }
 
-func NewTCPServer(loop eventloop.EventLoop, addrPort string) *tcpServer {
+func (server *tcpServer) onNewConnection(socketfd int, peerAddr netip.AddrPort) {
+	loop := server.evloopPoll.getNext()
+
+	conn := newConnection(loop, socketfd, peerAddr)
+	conn.setConnectedCallback(server.connectedCallback)
+	conn.setCloseCallback(func(t TCPConnection) {
+		// just do nothing
+	})
+	conn.setMessageCallback(server.msgCallback)
+
+	loop.RunInLoop(func() {
+		conn.establishConn()
+	})
+
+	server.nextConnId++
+}
+
+// if numWorkingThread is 0, all channel will run on single loop
+func NewTCPServer(loop eventloop.EventLoop, addrPort string,
+	numWorkingThread int, strategy LoadBalanceStrategy) TCPServer {
 	listenAt, err := netip.ParseAddrPort(addrPort)
 	if err != nil {
 		panic(err)
 	}
 
-	acceptor := newTCPAcceptor(loop, listenAt)
-	server := &tcpServer{
-		loop:              loop,
-		acceptor:          acceptor,
-		started:           false,
-		nextConnId:        0,
-		connectedCallback: defaultConnectedCallback,
-		msgCallback:       defaultMessageCallback,
-		connections:       make(map[int]*TCPConnection),
+	if numWorkingThread < 0 {
+		panic(numWorkingThread)
 	}
 
-	acceptor.SetNewConnectionCallback(func(socketfd int, peerAddr netip.AddrPort) {
-		conn := newConnection(acceptor.loop, socketfd, peerAddr)
-		conn.setConnectedCallback(server.connectedCallback)
-		conn.setCloseCallback(func(t *TCPConnection) {
-			delete(server.connections, t.socketChannel.GetFD())
-		})
-		conn.setMessageCallback(server.msgCallback)
-		conn.establishConn()
-		server.nextConnId++
-		server.connections[server.nextConnId] = conn
-	})
+	acceptor := newTCPAcceptor(loop, listenAt, 1024)
+	server := &tcpServer{
+		loop:                loop,
+		acceptor:            acceptor,
+		started:             false,
+		nextConnId:          0,
+		connectedCallback:   defaultConnectedCallback,
+		msgCallback:         defaultMessageCallback,
+		evloopPoll:          newEventloopGoroutinePoll(loop, numWorkingThread, strategy),
+		loadBalanceStrategy: strategy,
+	}
+
+	acceptor.SetNewConnectionCallback(server.onNewConnection)
 
 	return server
 }
 
-func defaultConnectedCallback(tc *TCPConnection) {
+func defaultConnectedCallback(tc TCPConnection) {
 	// just do nothing
 }
 
-func defaultMessageCallback(tc *TCPConnection, buf buffer.Buffer) {
+func defaultMessageCallback(tc TCPConnection, buf buffer.Buffer) {
 	buf.RetrieveAsString()
 }
