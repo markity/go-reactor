@@ -83,6 +83,9 @@ func (buf *buffer) ReadFD(fd int) int {
 	sz, _, _ := syscall.Syscall(syscall.SYS_READV, uintptr(fd), uintptr(unsafe.Pointer(&iovec)), 2)
 
 	size := int(sz)
+	if size < 0 {
+		size = 0
+	}
 
 	if size == 0 {
 		return 0
@@ -100,7 +103,7 @@ func (buf *buffer) ReadFD(fd int) int {
 
 func NewBuffer() Buffer {
 	return &buffer{
-		data:       make([]byte, 4096),
+		data:       make([]byte, 8192),
 		readIndex:  0,
 		writeIndex: 0,
 	}

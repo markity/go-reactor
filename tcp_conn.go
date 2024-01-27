@@ -1,7 +1,6 @@
 package goreactor
 
 import (
-	"fmt"
 	"go-reactor/pkg/buffer"
 	eventloop "go-reactor/pkg/event_loop"
 	"net/netip"
@@ -31,9 +30,6 @@ type TCPConnection interface {
 }
 
 type closeCallbackFunc func(TCPConnection)
-type HighWaterCallbackFunc func(TCPConnection, int)
-type WriteCompleteCallbackFunc func(TCPConnection)
-type DisConnectedCallbackFunc func(TCPConnection)
 
 // 能被多个协程share
 type tcpConnection struct {
@@ -131,7 +127,9 @@ func (conn *tcpConnection) ShutdownWrite() {
 	conn.loop.RunInLoop(func() {
 		if conn.state == Connected {
 			conn.state = Disconnecting
-			syscall.Shutdown(conn.socketChannel.GetFD(), syscall.SHUT_WR)
+			if !conn.socketChannel.IsWriting() {
+				syscall.Shutdown(conn.socketChannel.GetFD(), syscall.SHUT_WR)
+			}
 		}
 	})
 }
@@ -186,11 +184,13 @@ func (conn *tcpConnection) handleWrite() {
 		conn.loop.UpdateChannelInLoopGoroutine(conn.socketChannel)
 
 		conn.writeCompleteCallback(conn)
+		if conn.state == Disconnecting {
+			syscall.Shutdown(conn.socketChannel.GetFD(), syscall.SHUT_WR)
+		}
 	}
 }
 
 func (conn *tcpConnection) handleError() {
-	fmt.Println("error")
 }
 
 // 比如对端直接close了socket, 那么此时就进入readhup状态了
@@ -218,16 +218,4 @@ func (conn *tcpConnection) establishConn() {
 
 func (conn *tcpConnection) GetEventLoop() eventloop.EventLoop {
 	return conn.loop
-}
-
-func defaultHighWaterMarkCallback(tc TCPConnection, sz int) {
-	// just do nothing
-}
-
-func defaultWriteCompleteCallback(tc TCPConnection) {
-	// just do nothing
-}
-
-func defaultDisConnectedCallback(tc TCPConnection) {
-	// just do nothing
 }

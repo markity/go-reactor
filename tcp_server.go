@@ -1,7 +1,6 @@
 package goreactor
 
 import (
-	"go-reactor/pkg/buffer"
 	eventloop "go-reactor/pkg/event_loop"
 	"net/netip"
 )
@@ -12,9 +11,6 @@ type TCPServer interface {
 	Start() error
 }
 
-type ConnectedCallbackFunc func(TCPConnection)
-type MessageCallbackFunc func(TCPConnection, buffer.Buffer)
-
 type tcpServer struct {
 	loop eventloop.EventLoop
 
@@ -22,8 +18,6 @@ type tcpServer struct {
 
 	// only be used to prevent double start
 	started bool
-
-	nextConnId int
 
 	connectedCallback ConnectedCallbackFunc
 	msgCallback       MessageCallbackFunc
@@ -72,7 +66,6 @@ func (server *tcpServer) onNewConnection(socketfd int, peerAddr netip.AddrPort) 
 		conn.establishConn()
 	})
 
-	server.nextConnId++
 }
 
 // if numWorkingThread is 0, all channel will run on single loop
@@ -92,7 +85,6 @@ func NewTCPServer(loop eventloop.EventLoop, addrPort string,
 		loop:                loop,
 		acceptor:            acceptor,
 		started:             false,
-		nextConnId:          0,
 		connectedCallback:   defaultConnectedCallback,
 		msgCallback:         defaultMessageCallback,
 		evloopPoll:          newEventloopGoroutinePoll(loop, numWorkingThread, strategy),
@@ -102,12 +94,4 @@ func NewTCPServer(loop eventloop.EventLoop, addrPort string,
 	acceptor.SetNewConnectionCallback(server.onNewConnection)
 
 	return server
-}
-
-func defaultConnectedCallback(tc TCPConnection) {
-	// just do nothing
-}
-
-func defaultMessageCallback(tc TCPConnection, buf buffer.Buffer) {
-	buf.RetrieveAsString()
 }
