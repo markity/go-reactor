@@ -1,9 +1,10 @@
 package goreactor
 
 import (
-	eventloop "go-reactor/pkg/event_loop"
 	"net/netip"
 	"syscall"
+
+	eventloop "github.com/markity/go-reactor/pkg/event_loop"
 )
 
 type newConnectionCallback func(socketfd int, peerAddr netip.AddrPort)

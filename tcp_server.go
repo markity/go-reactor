@@ -1,8 +1,9 @@
 package goreactor
 
 import (
-	eventloop "go-reactor/pkg/event_loop"
 	"net/netip"
+
+	eventloop "github.com/markity/go-reactor/pkg/event_loop"
 )
 
 type TCPServer interface {

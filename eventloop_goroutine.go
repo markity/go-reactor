@@ -1,8 +1,9 @@
 package goreactor
 
 import (
-	eventloop "go-reactor/pkg/event_loop"
 	"sync/atomic"
+
+	eventloop "github.com/markity/go-reactor/pkg/event_loop"
 )
 
 type eventloopGoroutine struct {

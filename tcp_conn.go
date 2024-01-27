@@ -1,10 +1,12 @@
 package goreactor
 
 import (
-	"go-reactor/pkg/buffer"
-	eventloop "go-reactor/pkg/event_loop"
 	"net/netip"
 	"syscall"
+
+	eventloop "github.com/markity/go-reactor/pkg/event_loop"
+
+	"github.com/markity/go-reactor/pkg/buffer"
 )
 
 type tcpConnectionState int
@@ -27,6 +29,9 @@ type TCPConnection interface {
 	SetKeepAlive(b bool)
 	SetNoDelay(b bool)
 	GetEventLoop() eventloop.EventLoop
+	SetContext(key string, value interface{})
+	DeleteContext(key string)
+	GetContext(key string) (interface{}, bool)
 }
 
 type closeCallbackFunc func(TCPConnection)
@@ -53,6 +58,8 @@ type tcpConnection struct {
 
 	outputBuffer buffer.Buffer
 	inputBuffer  buffer.Buffer
+
+	ctx keyValueContext
 }
 
 func (tc *tcpConnection) setConnectedCallback(f ConnectedCallbackFunc) {
@@ -218,4 +225,16 @@ func (conn *tcpConnection) establishConn() {
 
 func (conn *tcpConnection) GetEventLoop() eventloop.EventLoop {
 	return conn.loop
+}
+
+func (conn *tcpConnection) SetContext(key string, value interface{}) {
+	conn.ctx.Set(key, value)
+}
+
+func (conn *tcpConnection) DeleteContext(key string) {
+	conn.ctx.Delete(key)
+}
+
+func (conn *tcpConnection) GetContext(key string) (interface{}, bool) {
+	return conn.ctx.Get(key)
 }

@@ -1,9 +1,11 @@
 package main
 
 import (
-	goreactor "go-reactor"
-	"go-reactor/pkg/buffer"
-	eventloop "go-reactor/pkg/event_loop"
+	eventloop "github.com/markity/go-reactor/pkg/event_loop"
+
+	"github.com/markity/go-reactor/pkg/buffer"
+
+	goreactor "github.com/markity/go-reactor"
 )
 
 func main() {

@@ -1,6 +1,6 @@
 package goreactor
 
-import "go-reactor/pkg/buffer"
+import "github.com/markity/go-reactor/pkg/buffer"
 
 type ConnectedCallbackFunc func(TCPConnection)
 type DisConnectedCallbackFunc func(TCPConnection)

@@ -2,6 +2,7 @@ package eventloop
 
 import (
 	"container/heap"
+	"fmt"
 	"syscall"
 	"time"
 	"unsafe"
@@ -73,6 +74,10 @@ func newTimerQueue(loop EventLoop) *timerQueue {
 	if errno != 0 {
 		panic(errno)
 	}
+	err := syscall.SetNonblock(int(timerfd), true)
+	if err != nil {
+		panic(err)
+	}
 
 	ch := NewChannel(int(timerfd))
 	ch.SetEvent(ReadableEvent)
@@ -111,7 +116,10 @@ func (tq *timerQueue) AddTimer(triggerAt time.Time, interval time.Duration, f fu
 		interval:  interval,
 	})
 
-	nsec := 0
+	// why 1?
+	// -If  new_value->it_value  specifies  a  zero  value (i.e.,
+	// both subfields are zero), then the timer is disarmed.
+	nsec := 1
 
 	// if trigger point alreay passed, nsec is 0, timerfd will be readable right now
 	now := time.Now()
@@ -120,6 +128,8 @@ func (tq *timerQueue) AddTimer(triggerAt time.Time, interval time.Duration, f fu
 		interval := earliest.Sub(now)
 		nsec = int(interval.Nanoseconds())
 	}
+
+	fmt.Println(nsec)
 
 	sp := itimerspec{
 		it_value: syscall.Timespec{

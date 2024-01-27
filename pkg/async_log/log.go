@@ -2,11 +2,12 @@ package async_log
 
 import (
 	"fmt"
-	"go-reactor/pkg/cond"
 	"os"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/markity/go-reactor/pkg/cond"
 )
 
 type LoggerLevel int
