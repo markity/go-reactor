@@ -2,6 +2,7 @@ package gamehandler
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	goreactor "github.com/markity/go-reactor"
 	commsettings "github.com/markity/go-reactor/examples/chinese_chess/backend/common_settings"
@@ -9,8 +10,6 @@ import (
 	"github.com/markity/go-reactor/pkg/buffer"
 
 	commpackets "github.com/markity/go-reactor/examples/chinese_chess/backend/common_packets"
-
-	"github.com/Allenxuxu/toolkit/sync/atomic"
 )
 
 type ConnState int
