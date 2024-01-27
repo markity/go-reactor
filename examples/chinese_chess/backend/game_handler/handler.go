@@ -75,6 +75,7 @@ func OnConnect(c goreactor.TCPConnection) {
 }
 
 func OnClose(c goreactor.TCPConnection) {
+	fmt.Println("on close")
 	connID_, _ := c.GetContext("conn_id")
 	connID := connID_.(int)
 	if ConnMap[connID].ConnState == ConnStateGaming {

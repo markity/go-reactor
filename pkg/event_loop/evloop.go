@@ -191,6 +191,10 @@ func (ev *eventloop) GetID() int {
 }
 
 func (ev *eventloop) GetChannelCount() int {
+	if getGid() == ev.gid {
+		return ev.poller.GetChannelCount()
+	}
+
 	c := make(chan int, 1)
 	ev.RunInLoop(func() {
 		c <- ev.poller.GetChannelCount()
@@ -203,20 +207,22 @@ func (ev *eventloop) RunAt(triggerAt time.Time, interval time.Duration, f func()
 	// ev.timerQueue can noly be operated in loop goroutine, we need to use RunInLoop
 	// and get its return value by golang channel
 	if getGid() == ev.gid {
-		i := ev.timerQueue.AddTimer(triggerAt, interval, f)
-		return i
+		return ev.timerQueue.AddTimer(triggerAt, interval, f)
 	}
 
 	c := make(chan int, 1)
 	ev.RunInLoop(func() {
-		i := ev.timerQueue.AddTimer(triggerAt, interval, f)
-		c <- i
+		c <- ev.timerQueue.AddTimer(triggerAt, interval, f)
 	})
 	return <-c
 }
 
 // cancel a timer
 func (ev *eventloop) CancelTimer(id int) bool {
+	if getGid() == ev.gid {
+		return ev.timerQueue.CancelTimer(id)
+	}
+
 	c := make(chan bool, 1)
 	ev.RunInLoop(func() {
 		c <- ev.timerQueue.CancelTimer(id)
