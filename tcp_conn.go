@@ -32,6 +32,8 @@ type TCPConnection interface {
 	SetContext(key string, value interface{})
 	DeleteContext(key string)
 	GetContext(key string) (interface{}, bool)
+	GetFD() int
+	IsConnected() bool
 }
 
 type closeCallbackFunc func(TCPConnection)
@@ -237,4 +239,16 @@ func (conn *tcpConnection) DeleteContext(key string) {
 
 func (conn *tcpConnection) GetContext(key string) (interface{}, bool) {
 	return conn.ctx.Get(key)
+}
+
+func (conn *tcpConnection) GetFD() int {
+	return conn.socketChannel.GetFD()
+}
+
+func (conn *tcpConnection) IsConnected() bool {
+	c := make(chan bool, 1)
+	conn.loop.RunInLoop(func() {
+		c <- conn.state == Connected
+	})
+	return <-c
 }
