@@ -67,12 +67,12 @@ func (buf *buffer) Append(bs []byte) {
 func (buf *buffer) ReadFD(fd int) int {
 	writable := len(buf.data) - buf.writeIndex
 	extrabuf := make([]byte, 65536)
-	ptr := uintptr(unsafe.Pointer(&buf.data[0]))
+	ptr := uintptr(unsafe.Pointer(&buf.data[buf.writeIndex]))
 	base := (*byte)(unsafe.Pointer(ptr))
 	iovec := [2]syscall.Iovec{
 		{
 			Base: base,
-			Len:  uint64(len(buf.data) - buf.writeIndex),
+			Len:  uint64(writable),
 		},
 		{
 			Base: (*byte)(unsafe.Pointer(&extrabuf[0])),
