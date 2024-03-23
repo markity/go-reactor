@@ -7,9 +7,6 @@ import (
 )
 
 type TCPServer interface {
-	SetContext(key string, val interface{})
-	GetContext(key string) (interface{}, bool)
-	DeleteContext(key string)
 	SetConnectionCallback(f ConnectedCallbackFunc)
 	SetMessageCallback(f MessageCallbackFunc)
 	Start() error
