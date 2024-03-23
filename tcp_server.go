@@ -7,6 +7,9 @@ import (
 )
 
 type TCPServer interface {
+	SetContext(key string, val interface{})
+	GetContext(key string) (interface{}, bool)
+	DeleteContext(key string)
 	SetConnectionCallback(f ConnectedCallbackFunc)
 	SetMessageCallback(f MessageCallbackFunc)
 	Start() error
@@ -26,6 +29,8 @@ type tcpServer struct {
 	evloopPoll *eventloopGoroutinePoll
 
 	loadBalanceStrategy LoadBalanceStrategy
+
+	ctx keyValueContext
 }
 
 func (server *tcpServer) SetConnectionCallback(f ConnectedCallbackFunc) {
@@ -34,6 +39,18 @@ func (server *tcpServer) SetConnectionCallback(f ConnectedCallbackFunc) {
 
 func (server *tcpServer) SetMessageCallback(f MessageCallbackFunc) {
 	server.msgCallback = f
+}
+
+func (server *tcpServer) SetContext(key string, val interface{}) {
+	server.ctx.Set(key, val)
+}
+
+func (server *tcpServer) GetContext(key string) (interface{}, bool) {
+	return server.ctx.Get(key)
+}
+
+func (server *tcpServer) DeleteContext(key string) {
+	server.ctx.Delete(key)
 }
 
 func (server *tcpServer) Start() error {
