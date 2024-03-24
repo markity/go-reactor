@@ -33,7 +33,7 @@ func (poll *eventloopGoroutinePoll) start() {
 
 	loops := make([]eventloop.EventLoop, 0, poll.numOfGoroutine)
 	for i := 1; i <= poll.numOfGoroutine; i++ {
-		g := newEventLoopGoroutine(i)
+		g := newEventLoopGoroutine()
 		loops = append(loops, g.startLoop())
 	}
 	poll.loops = loops

@@ -37,7 +37,7 @@ type eventloop struct {
 
 // create an EventLoop, it's Loop function can be only triggered
 // at the goroutine which creates the eventloop
-func NewEventLoop(id int) EventLoop {
+func NewEventLoop() EventLoop {
 	// create an eventfd, the eventfd is used to wake up epoll_wait
 
 	// for example, when a loop.RunInLoop(f) is called, but now the
@@ -74,7 +74,7 @@ func NewEventLoop(id int) EventLoop {
 		functors:           make([]func(), 0),
 		running:            0,
 		gid:                getGid(),
-		id:                 id,
+		id:                 int(idGen.Add(1)),
 		ctx:                kvcontext.NewContext(),
 	}
 

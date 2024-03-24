@@ -5,6 +5,6 @@ import (
 )
 
 func main() {
-	loop := eventloop.NewEventLoop(0)
+	loop := eventloop.NewEventLoop()
 	loop.Loop()
 }

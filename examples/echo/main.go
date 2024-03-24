@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	loop := eventloop.NewEventLoop(0)
+	loop := eventloop.NewEventLoop()
 
 	server := goreactor.NewTCPServer(loop, "127.0.0.1:8000", 0, goreactor.RoundRobin())
 	server.SetConnectionCallback(func(t goreactor.TCPConnection) {

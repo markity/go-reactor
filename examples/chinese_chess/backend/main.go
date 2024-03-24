@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	loop := eventloop.NewEventLoop(0)
+	loop := eventloop.NewEventLoop()
 	loop.RunAt(time.Now(), time.Millisecond*commsettings.HeartbeatInterval, gamehandler.OnTimeout)
 
 	listenIPPort := fmt.Sprintf("%v:%v", commsettings.ServerListenIP, commsettings.ServerListenPort)

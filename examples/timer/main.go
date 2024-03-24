@@ -12,7 +12,7 @@ func onTimeout() {
 }
 
 func main() {
-	loop := eventloop.NewEventLoop(0)
+	loop := eventloop.NewEventLoop()
 	loop.RunAt(time.Now(), time.Second*3, onTimeout)
 	loop.Loop()
 }

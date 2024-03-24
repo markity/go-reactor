@@ -8,7 +8,6 @@ import (
 
 type eventloopGoroutine struct {
 	started int64
-	id      int
 }
 
 func (routine *eventloopGoroutine) startLoop() eventloop.EventLoop {
@@ -18,7 +17,7 @@ func (routine *eventloopGoroutine) startLoop() eventloop.EventLoop {
 
 	c := make(chan eventloop.EventLoop, 1)
 	go func() {
-		loop := eventloop.NewEventLoop(routine.id)
+		loop := eventloop.NewEventLoop()
 		c <- loop
 		loop.Loop()
 	}()
@@ -26,9 +25,8 @@ func (routine *eventloopGoroutine) startLoop() eventloop.EventLoop {
 	return <-c
 }
 
-func newEventLoopGoroutine(id int) *eventloopGoroutine {
+func newEventLoopGoroutine() *eventloopGoroutine {
 	return &eventloopGoroutine{
 		started: 0,
-		id:      id,
 	}
 }
