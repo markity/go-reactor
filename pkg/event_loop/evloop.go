@@ -34,7 +34,7 @@ type eventloop struct {
 
 	ctx kvcontext.KVContext
 
-	doOnLoop func()
+	doOnLoop func(EventLoop)
 }
 
 // create an EventLoop, it's Loop function can be only triggered
@@ -128,7 +128,7 @@ type EventLoop interface {
 	DeleteContext(key string)
 
 	// be called when start loop
-	DoOnLoop(func())
+	DoOnLoop(func(EventLoop))
 }
 
 func (ev *eventloop) GetContext(key string) (interface{}, bool) {
@@ -153,7 +153,7 @@ func (ev *eventloop) RemoveChannelInLoopGoroutine(c Channel) {
 	ev.poller.RemoveChannel(c)
 }
 
-func (ev *eventloop) DoOnLoop(f func()) {
+func (ev *eventloop) DoOnLoop(f func(EventLoop)) {
 	ev.doOnLoop = f
 }
 
@@ -170,7 +170,7 @@ func (ev *eventloop) Loop() {
 	}
 
 	if ev.doOnLoop != nil {
-		ev.doOnLoop()
+		ev.doOnLoop(ev)
 	}
 
 	// check running, if running is 0, Loop should returns
