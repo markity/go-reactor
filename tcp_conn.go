@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"syscall"
 
+	kvcontext "github.com/markity/go-reactor/pkg/context"
 	eventloop "github.com/markity/go-reactor/pkg/event_loop"
 
 	"github.com/markity/go-reactor/pkg/buffer"
@@ -61,7 +62,7 @@ type tcpConnection struct {
 	outputBuffer buffer.Buffer
 	inputBuffer  buffer.Buffer
 
-	ctx keyValueContext
+	ctx kvcontext.KVContext
 }
 
 func (tc *tcpConnection) setConnectedCallback(f ConnectedCallbackFunc) {
@@ -105,6 +106,7 @@ func newConnection(loop eventloop.EventLoop, sockFD int, remoteAddrPort netip.Ad
 		highWaterCallback:     defaultHighWaterMarkCallback,
 		writeCompleteCallback: defaultWriteCompleteCallback,
 		disconnectedCallback:  defaultDisConnectedCallback,
+		ctx:                   kvcontext.NewContext(),
 	}
 	channel.SetCloseCallback(c.handleClose)
 	channel.SetErrorCallback(c.handleError)

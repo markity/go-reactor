@@ -1,4 +1,4 @@
-package goreactor
+package kvcontext
 
 import "sync"
 
@@ -6,6 +6,12 @@ type keyValueContext struct {
 	mu sync.RWMutex
 
 	kv map[string]interface{}
+}
+
+type KVContext interface {
+	Set(key string, value interface{})
+	Delete(key string)
+	Get(key string) (value interface{}, exists bool)
 }
 
 func (c *keyValueContext) Set(key string, value interface{}) {
@@ -35,4 +41,10 @@ func (c *keyValueContext) reset() {
 	c.mu.Lock()
 	c.kv = nil
 	c.mu.Unlock()
+}
+
+func NewContext() KVContext {
+	return &keyValueContext{
+		kv: make(map[string]interface{}),
+	}
 }

@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	kvcontext "github.com/markity/go-reactor/pkg/context"
 )
 
 type eventloop struct {
@@ -29,6 +31,8 @@ type eventloop struct {
 	gid uint64
 
 	id int
+
+	ctx kvcontext.KVContext
 }
 
 // create an EventLoop, it's Loop function can be only triggered
@@ -71,6 +75,7 @@ func NewEventLoop(id int) EventLoop {
 		running:            0,
 		gid:                getGid(),
 		id:                 id,
+		ctx:                kvcontext.NewContext(),
 	}
 
 	// register the channel into epoll
@@ -114,6 +119,23 @@ type EventLoop interface {
 
 	// remove a channel from eventloop, the fd will also be remove from epollfd
 	RemoveChannelInLoopGoroutine(Channel)
+
+	// about kv context
+	GetContext(key string) (interface{}, bool)
+	SetContext(key string, val interface{})
+	DeleteContext(key string)
+}
+
+func (ev *eventloop) GetContext(key string) (interface{}, bool) {
+	return ev.ctx.Get(key)
+}
+
+func (ev *eventloop) SetContext(key string, val interface{}) {
+	ev.ctx.Set(key, val)
+}
+
+func (ev *eventloop) DeleteContext(key string) {
+	ev.ctx.Delete(key)
 }
 
 // the function can be only triggered at eventloop goroutine
