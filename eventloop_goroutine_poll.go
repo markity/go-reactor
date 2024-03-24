@@ -7,6 +7,7 @@ import (
 type eventloopGoroutinePoll struct {
 	numOfGoroutine int
 	started        int64
+	loopGoroutines []*eventloopGoroutine
 	loops          []eventloop.EventLoop
 	baseLoop       eventloop.EventLoop
 	strategy       LoadBalanceStrategy
@@ -18,11 +19,21 @@ func newEventloopGoroutinePoll(baseLoop eventloop.EventLoop,
 		panic(numOfGoroutinePoll)
 	}
 
+	loopGoroutines := make([]*eventloopGoroutine, 0, numOfGoroutinePoll)
+	loops := make([]eventloop.EventLoop, 0, numOfGoroutinePoll)
+	for i := 1; i <= numOfGoroutinePoll; i++ {
+		g := newEventLoopGoroutine()
+		loopGoroutines = append(loopGoroutines, g)
+		loops = append(loops, g.loop)
+	}
+
 	return &eventloopGoroutinePoll{
 		numOfGoroutine: numOfGoroutinePoll,
 		started:        0,
 		baseLoop:       baseLoop,
 		strategy:       strategy,
+		loopGoroutines: loopGoroutines,
+		loops:          loops,
 	}
 }
 
@@ -31,12 +42,10 @@ func (poll *eventloopGoroutinePoll) start() {
 		panic(poll.started)
 	}
 
-	loops := make([]eventloop.EventLoop, 0, poll.numOfGoroutine)
-	for i := 1; i <= poll.numOfGoroutine; i++ {
-		g := newEventLoopGoroutine()
-		loops = append(loops, g.startLoop())
+	for _, loop := range poll.loopGoroutines {
+		loop.startLoop()
 	}
-	poll.loops = loops
+
 	poll.started = 1
 }
 
