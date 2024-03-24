@@ -124,6 +124,7 @@ type EventLoop interface {
 
 	// about kv context
 	GetContext(key string) (interface{}, bool)
+	MustGetContext(key string) interface{}
 	SetContext(key string, val interface{})
 	DeleteContext(key string)
 
@@ -133,6 +134,14 @@ type EventLoop interface {
 
 func (ev *eventloop) GetContext(key string) (interface{}, bool) {
 	return ev.ctx.Get(key)
+}
+
+func (ev *eventloop) MustGetContext(key string) interface{} {
+	v, ok := ev.ctx.Get(key)
+	if !ok {
+		panic("must get context not exists")
+	}
+	return v
 }
 
 func (ev *eventloop) SetContext(key string, val interface{}) {

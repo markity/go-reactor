@@ -33,6 +33,7 @@ type TCPConnection interface {
 	SetContext(key string, value interface{})
 	DeleteContext(key string)
 	GetContext(key string) (interface{}, bool)
+	MustGetContext(key string) interface{}
 	GetFD() int
 	IsConnected() bool
 }
@@ -241,6 +242,14 @@ func (conn *tcpConnection) DeleteContext(key string) {
 
 func (conn *tcpConnection) GetContext(key string) (interface{}, bool) {
 	return conn.ctx.Get(key)
+}
+
+func (ev *tcpConnection) MustGetContext(key string) interface{} {
+	v, ok := ev.ctx.Get(key)
+	if !ok {
+		panic("must get context not exists")
+	}
+	return v
 }
 
 func (conn *tcpConnection) GetFD() int {
