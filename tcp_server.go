@@ -10,6 +10,7 @@ type TCPServer interface {
 	SetConnectionCallback(f ConnectedCallbackFunc)
 	SetMessageCallback(f MessageCallbackFunc)
 	Start() error
+	GetAllLoops() (baseLoop eventloop.EventLoop, others []eventloop.EventLoop)
 }
 
 type tcpServer struct {
@@ -51,6 +52,13 @@ func (server *tcpServer) Start() error {
 	server.started = true
 
 	return nil
+}
+
+func (server *tcpServer) GetAllLoops() (baseLoop eventloop.EventLoop,
+	others []eventloop.EventLoop) {
+	cpy := make([]eventloop.EventLoop, len(server.evloopPoll.loops))
+	copy(cpy, server.evloopPoll.loops)
+	return server.loop, cpy
 }
 
 func (server *tcpServer) onNewConnection(socketfd int, peerAddr netip.AddrPort) {

@@ -33,6 +33,8 @@ type eventloop struct {
 	id int
 
 	ctx kvcontext.KVContext
+
+	doOnLoop func()
 }
 
 // create an EventLoop, it's Loop function can be only triggered
@@ -124,6 +126,9 @@ type EventLoop interface {
 	GetContext(key string) (interface{}, bool)
 	SetContext(key string, val interface{})
 	DeleteContext(key string)
+
+	// be called when start loop
+	DoOnLoop(func())
 }
 
 func (ev *eventloop) GetContext(key string) (interface{}, bool) {
@@ -148,9 +153,12 @@ func (ev *eventloop) RemoveChannelInLoopGoroutine(c Channel) {
 	ev.poller.RemoveChannel(c)
 }
 
+func (ev *eventloop) DoOnLoop(f func()) {
+	ev.doOnLoop = f
+}
+
 // start event loop, if Stop() is not called, Loop() will never return
 func (ev *eventloop) Loop() {
-
 	// check gid, Loop() can be only called at the goroutine which creates it
 	if ev.gid != getGid() {
 		panic("loop must be run at the goroutine created at")
@@ -159,6 +167,10 @@ func (ev *eventloop) Loop() {
 	// atomic operation, make running switch 0 to 1
 	if !atomic.CompareAndSwapInt64(&ev.running, 0, 1) {
 		panic("it is already running? don't run it again")
+	}
+
+	if ev.doOnLoop != nil {
+		ev.doOnLoop()
 	}
 
 	// check running, if running is 0, Loop should returns
