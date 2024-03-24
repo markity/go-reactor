@@ -168,15 +168,12 @@ func (ev *eventloop) DoOnLoop(f func(EventLoop)) {
 
 // start event loop, if Stop() is not called, Loop() will never return
 func (ev *eventloop) Loop() {
-	// check gid, Loop() can be only called at the goroutine which creates it
-	if ev.gid != getGid() {
-		panic("loop must be run at the goroutine created at")
-	}
-
 	// atomic operation, make running switch 0 to 1
 	if !atomic.CompareAndSwapInt64(&ev.running, 0, 1) {
 		panic("it is already running? don't run it again")
 	}
+
+	ev.gid = getGid()
 
 	if ev.doOnLoop != nil {
 		ev.doOnLoop(ev)
