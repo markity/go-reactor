@@ -2,7 +2,6 @@ package eventloop
 
 import (
 	"container/heap"
-	"fmt"
 	"syscall"
 	"time"
 	"unsafe"
@@ -128,8 +127,6 @@ func (tq *timerQueue) AddTimer(triggerAt time.Time, interval time.Duration, f fu
 		interval := earliest.Sub(now)
 		nsec = int(interval.Nanoseconds())
 	}
-
-	fmt.Println(nsec)
 
 	sp := itimerspec{
 		it_value: syscall.Timespec{
