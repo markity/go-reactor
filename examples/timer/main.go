@@ -7,8 +7,8 @@ import (
 	eventloop "github.com/markity/go-reactor/pkg/event_loop"
 )
 
-func onTimeout() {
-	fmt.Println("timeout")
+func onTimeout(timerId int) {
+	fmt.Println("timeout", timerId)
 }
 
 func main() {

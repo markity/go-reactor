@@ -20,7 +20,7 @@ type timerHeapEntry struct {
 	// first trigger timepoint
 	TimeStamp time.Time
 	// callback function
-	onTimer func()
+	onTimer func(int)
 	// if interval is 0, only trigger once
 	interval time.Duration
 }
@@ -97,7 +97,7 @@ func newTimerQueue(loop EventLoop) *timerQueue {
 		}
 
 		for _, v := range tq.getExpired() {
-			v.onTimer()
+			v.onTimer(v.timerId)
 		}
 	})
 
@@ -105,7 +105,7 @@ func newTimerQueue(loop EventLoop) *timerQueue {
 }
 
 // create a new timer, returns its id
-func (tq *timerQueue) AddTimer(triggerAt time.Time, interval time.Duration, f func()) int {
+func (tq *timerQueue) AddTimer(triggerAt time.Time, interval time.Duration, f func(timerID int)) int {
 	tq.timerIdCounter++
 	id := tq.timerIdCounter
 	heap.Push(&tq.heap, timerHeapEntry{

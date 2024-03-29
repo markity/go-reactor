@@ -101,7 +101,7 @@ type EventLoop interface {
 	Stop()
 
 	// create a timer, it will be triggered at specified timepoint
-	RunAt(triggerAt time.Time, interval time.Duration, f func()) int
+	RunAt(triggerAt time.Time, interval time.Duration, f func(timerID int)) int
 
 	// cancel a timer, if it is removed successfully, returns true
 	// if the timer is already executed or the id is invalid, returns false
@@ -243,7 +243,7 @@ func (ev *eventloop) GetChannelCount() int {
 }
 
 // setup a timer, returns its id, it can be cancelled, see CancelTimer(id int)
-func (ev *eventloop) RunAt(triggerAt time.Time, interval time.Duration, f func()) int {
+func (ev *eventloop) RunAt(triggerAt time.Time, interval time.Duration, f func(timerID int)) int {
 	// ev.timerQueue can noly be operated in loop goroutine, we need to use RunInLoop
 	// and get its return value by golang channel
 	if getGid() == ev.gid {

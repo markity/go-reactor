@@ -48,7 +48,7 @@ func init() {
 }
 
 // 用来剔除过时的连接, 并发送心跳包
-func OnTimeout() {
+func OnTimeout(timerID int) {
 	fmt.Println("on timeout")
 	var packet = commpackets.PacketHeartbeat{}
 	heartPacketBytesWithHeader := tools.DoPackWith4BytesHeader(packet.MustMarshalToBytes())
