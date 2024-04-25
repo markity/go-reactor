@@ -74,6 +74,7 @@ func main() {
 				if err != nil {
 					win.PopBackLine()
 					win.SendLineBack("invalid input")
+					continue
 				}
 
 				movePacket := commpackets.PacketClientMove{FromX: fromX, FromY: fromY, ToX: toX, ToY: toY}

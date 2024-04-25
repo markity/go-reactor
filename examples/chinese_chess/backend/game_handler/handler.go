@@ -102,6 +102,7 @@ func OnMessage(c goreactor.TCPConnection, buf buffer.Buffer) {
 		fmt.Println("not ok")
 		return
 	}
+	buf.Retrieve(len(packetBytes) + 4)
 
 	packIface := commpackets.ServerParse(packetBytes)
 	switch packet := packIface.(type) {

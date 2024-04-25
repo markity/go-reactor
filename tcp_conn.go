@@ -109,11 +109,9 @@ func newConnection(loop eventloop.EventLoop, sockFD int, remoteAddrPort netip.Ad
 		disconnectedCallback:  defaultDisConnectedCallback,
 		ctx:                   kvcontext.NewContext(),
 	}
-	channel.SetCloseCallback(c.handleClose)
-	channel.SetErrorCallback(c.handleError)
 	channel.SetReadCallback(c.handleRead)
 	channel.SetWriteCallback(c.handleWrite)
-	channel.SetEvent(eventloop.CloseEvent | eventloop.ErrorEvent | eventloop.ReadableEvent | eventloop.WritableEvent)
+	channel.SetEvent(eventloop.CloseEvent | eventloop.ReadableEvent | eventloop.WritableEvent)
 
 	return c
 }
@@ -200,9 +198,6 @@ func (conn *tcpConnection) handleWrite() {
 			syscall.Shutdown(conn.socketChannel.GetFD(), syscall.SHUT_WR)
 		}
 	}
-}
-
-func (conn *tcpConnection) handleError() {
 }
 
 // 比如对端直接close了socket, 那么此时就进入readhup状态了

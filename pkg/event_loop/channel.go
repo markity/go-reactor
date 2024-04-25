@@ -11,9 +11,8 @@ const (
 	NoneEvent     ReactorEvent = 0
 	ReadableEvent ReactorEvent = syscall.EPOLLIN
 	WritableEvent ReactorEvent = syscall.EPOLLOUT
-	ErrorEvent    ReactorEvent = syscall.EPOLLERR
 	CloseEvent    ReactorEvent = syscall.EPOLLHUP
-	AllEvent      ReactorEvent = ReadableEvent | WritableEvent | ErrorEvent | CloseEvent
+	AllEvent      ReactorEvent = ReadableEvent | WritableEvent | CloseEvent
 )
 
 type channel struct {
@@ -35,8 +34,6 @@ type channel struct {
 	// callbacks
 	readCallback  func()
 	writeCallback func()
-	errorCallback func()
-	closeCallback func()
 }
 
 // some setters and getters
@@ -75,14 +72,6 @@ func (c *channel) SetReadCallback(f func()) {
 
 func (c *channel) SetWriteCallback(f func()) {
 	c.writeCallback = f
-}
-
-func (c *channel) SetErrorCallback(f func()) {
-	c.errorCallback = f
-}
-
-func (c *channel) SetCloseCallback(f func()) {
-	c.closeCallback = f
 }
 
 func (c *channel) IsWriting() bool {
@@ -139,18 +128,7 @@ func (c *channel) DisableRead() bool {
 
 // handle all events for the channel
 func (c *channel) HandleEvent() {
-	// TODO: more comment
-	if (c.revents&syscall.EPOLLHUP) != 0 && (c.revents&syscall.EPOLLIN) == 0 {
-		if c.closeCallback != nil {
-			c.closeCallback()
-		}
-	}
-
-	if c.revents&syscall.EPOLLERR != 0 {
-		if c.errorCallback != nil {
-			c.errorCallback()
-		}
-	}
+	// TODO: EPOLLHUP
 
 	if c.revents&ReadableEvent != 0 {
 		if c.readCallback != nil {
@@ -188,8 +166,6 @@ type Channel interface {
 
 	SetReadCallback(func())
 	SetWriteCallback(func())
-	SetErrorCallback(func())
-	SetCloseCallback(func())
 
 	HandleEvent()
 
