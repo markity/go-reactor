@@ -8,6 +8,7 @@ import (
 	commsettings "github.com/markity/go-reactor/examples/chinese_chess/backend/common_settings"
 	"github.com/markity/go-reactor/examples/chinese_chess/backend/tools"
 	"github.com/markity/go-reactor/pkg/buffer"
+	eventloop "github.com/markity/go-reactor/pkg/event_loop"
 
 	commpackets "github.com/markity/go-reactor/examples/chinese_chess/backend/common_packets"
 )
@@ -48,7 +49,7 @@ func init() {
 }
 
 // 用来剔除过时的连接, 并发送心跳包
-func OnTimeout(timerID int) {
+func OnTimeout(loop eventloop.EventLoop, timerID int) {
 	fmt.Println("on timeout")
 	var packet = commpackets.PacketHeartbeat{}
 	heartPacketBytesWithHeader := tools.DoPackWith4BytesHeader(packet.MustMarshalToBytes())

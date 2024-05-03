@@ -20,7 +20,7 @@ type timerHeapEntry struct {
 	// first trigger timepoint
 	TimeStamp time.Time
 	// callback function
-	onTimer func(int)
+	onTimer func(EventLoop, int)
 	// if interval is 0, only trigger once
 	interval time.Duration
 }
@@ -75,7 +75,7 @@ func newTimerQueue(loop EventLoop) *timerQueue {
 	}
 
 	ch := NewChannel(int(timerfd))
-	ch.SetEvent(ReadableEvent)
+	ch.EnableRead(false)
 	tq := timerQueue{
 		timerChannel:   ch,
 		timerIdCounter: 0,
@@ -83,12 +83,13 @@ func newTimerQueue(loop EventLoop) *timerQueue {
 		loop:           loop,
 	}
 	heap.Init(&tq.heap)
-	loop.UpdateChannelInLoopGoroutine(ch)
+	loop.RegisterChannelInLoopGoroutine(ch)
 
 	// read callback consumes content in timerfd and call getExpired() to execute callbakcs
 	ch.SetReadCallback(func([]byte, int) {
+		ch.DisableReadPending()
 		for _, v := range tq.getExpired() {
-			v.onTimer(v.timerId)
+			v.onTimer(loop, v.timerId)
 		}
 		ch.EnableRead(false)
 	})
@@ -97,7 +98,7 @@ func newTimerQueue(loop EventLoop) *timerQueue {
 }
 
 // create a new timer, returns its id
-func (tq *timerQueue) AddTimer(triggerAt time.Time, interval time.Duration, f func(timerID int)) int {
+func (tq *timerQueue) AddTimer(triggerAt time.Time, interval time.Duration, f func(loop EventLoop, timerID int)) int {
 	tq.timerIdCounter++
 	id := tq.timerIdCounter
 	heap.Push(&tq.heap, timerHeapEntry{

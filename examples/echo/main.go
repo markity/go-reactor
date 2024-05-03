@@ -13,7 +13,7 @@ import (
 func main() {
 	loop := eventloop.NewEventLoop()
 
-	server := goreactor.NewTCPServer(loop, "127.0.0.1:8000", 0, goreactor.RoundRobin())
+	server := goreactor.NewTCPServer(loop, "127.0.0.1:8000", 16, goreactor.RoundRobin())
 	server.SetConnectionCallback(func(t goreactor.TCPConnection) {
 		fmt.Println("a new connection join, loop is", t.GetEventLoop().GetID())
 		t.SetDisConnectedCallback(func(t goreactor.TCPConnection) {

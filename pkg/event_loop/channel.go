@@ -16,19 +16,28 @@ type channel struct {
 
 	// events that we are interested, if we want to do something when the fd
 	// is readable, we need to set events to ReadableEvent and SetReadCallback
-	events    ReactorEvent
+	events ReactorEvent
+
+	// when WritableEvent is enabled, tobeWrite stores bytes to be submitted to iouring
 	tobeWrite []byte
-	// is isAccept is true, use uring.Accept instead of uring.Read
+
+	// for read op, if isAccept is true, use uring.Accept instead of uring.Read
 	isAccept bool
 
-	revents                ReactorEvent
-	handleEventReadCbData1 []byte
-	handleEventReadCbData2 int
+	// revents show that which event is active now(can trigger callback)
+	revents ReactorEvent
 
-	writePending bool // write op submitted
-	readPending  bool // read op submitted
+	// for read callback, data1 is []byte type, data2 is res
+	handleEventReadCbDataBytesBuffer []byte
+	handleEventReadCbDataRes         int
 
-	handleEventWriteCbData int
+	// for write callback, data is n
+	handleEventWriteCbDataN int
+
+	// if true, write op is submitted
+	writePending bool
+	// if true, read op is submitted
+	readPending bool
 
 	// used by poller, if index is zero, the poller knows it is a new channel,
 	// and poller will set a index for the channel
@@ -45,10 +54,6 @@ func (c *channel) GetEvent() ReactorEvent {
 	return c.events
 }
 
-func (c *channel) SetEvent(e ReactorEvent) {
-	c.events = e
-}
-
 func (c *channel) IsWritePending() bool {
 	return c.writePending
 }
@@ -59,13 +64,13 @@ func (c *channel) IsReadPending() bool {
 
 func (c *channel) EnableReventRead(bs []byte, res int) {
 	c.revents |= ReadableEvent
-	c.handleEventReadCbData1 = bs
-	c.handleEventReadCbData2 = res
+	c.handleEventReadCbDataBytesBuffer = bs
+	c.handleEventReadCbDataRes = res
 }
 
 func (c *channel) EnableReventWrite(d int) {
 	c.revents |= WritableEvent
-	c.handleEventWriteCbData = d
+	c.handleEventWriteCbDataN = d
 }
 
 func (c *channel) GetIndex() int {
@@ -101,6 +106,10 @@ func (c *channel) IsReading() bool {
 // false returns, we do not need to call eventloop.UpdateChannelInLoopGoroutine, this
 // save the cost of the epoll_ctl system call
 func (c *channel) EnableWrite(bs []byte) bool {
+	if c.IsWritePending() {
+		panic("enable write when write pending")
+	}
+
 	if c.events&WritableEvent != 0 {
 		return false
 	}
@@ -123,6 +132,10 @@ func (c *channel) DisableWrite() bool {
 
 // enable read
 func (c *channel) EnableRead(isAccept bool) bool {
+	if c.IsReadPending() {
+		panic("enable read when read is pending")
+	}
+
 	if c.events&ReadableEvent != 0 {
 		return false
 	}
@@ -148,13 +161,13 @@ func (c *channel) HandleEvent() {
 
 	if c.revents&ReadableEvent != 0 {
 		if c.readCallback != nil {
-			c.readCallback(c.handleEventReadCbData1, c.handleEventReadCbData2)
+			c.readCallback(c.handleEventReadCbDataBytesBuffer, c.handleEventReadCbDataRes)
 		}
 	}
 
 	if c.revents&WritableEvent != 0 {
 		if c.writeCallback != nil {
-			c.writeCallback(c.handleEventWriteCbData)
+			c.writeCallback(c.handleEventWriteCbDataN)
 		}
 	}
 
@@ -188,7 +201,6 @@ func NewChannel(fd int) Channel {
 // Channel is used to manage a fd events, and handle callbacks
 type Channel interface {
 	GetEvent() ReactorEvent
-	SetEvent(ReactorEvent)
 
 	GetIndex() int
 	SetIndex(int)

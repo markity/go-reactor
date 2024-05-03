@@ -79,7 +79,7 @@ func (ac *tcpAcceptor) Listen() error {
 
 	ac.listening = true
 	ac.socketChannel.EnableRead(true)
-	ac.loop.UpdateChannelInLoopGoroutine(ac.socketChannel)
+	ac.loop.RegisterChannelInLoopGoroutine(ac.socketChannel)
 	return nil
 }
 

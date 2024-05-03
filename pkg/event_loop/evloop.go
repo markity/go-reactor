@@ -11,10 +11,10 @@ import (
 )
 
 type eventloop struct {
-	// Poller is epoll poller
+	// Poller is io_uring poller
 	poller Poller
 
-	// eventfd, be used to wake up epoll_wait syscall
+	// eventfd, be used to wake up uring.WaitCQEvents syscall
 	wakeupEventChannel Channel
 
 	// be used to manage timers, timerQueue contains a timerfd
@@ -30,10 +30,13 @@ type eventloop struct {
 	// gid is goroutine id, be set when NewEventLoop
 	gid uint64
 
+	// each eventloop contains a id, be assigned automatically
 	id int
 
+	// eventloop scope kv
 	ctx kvcontext.KVContext
 
+	// functions to be lauched at startup
 	doOnLoop func(EventLoop)
 }
 
@@ -56,6 +59,7 @@ func NewEventLoop() EventLoop {
 	c := NewChannel(int(r1))
 	c.EnableRead(false)
 	c.SetReadCallback(func([]byte, int) {
+		c.DisableReadPending()
 		c.EnableRead(false)
 	})
 
@@ -70,7 +74,7 @@ func NewEventLoop() EventLoop {
 	}
 
 	// register the channel into epoll
-	ev.UpdateChannelInLoopGoroutine(ev.wakeupEventChannel)
+	ev.RegisterChannelInLoopGoroutine(ev.wakeupEventChannel)
 
 	// create a timer queue
 	ev.timerQueue = newTimerQueue(ev)
@@ -90,7 +94,7 @@ type EventLoop interface {
 	Stop()
 
 	// create a timer, it will be triggered at specified timepoint
-	RunAt(triggerAt time.Time, interval time.Duration, f func(timerID int)) int
+	RunAt(triggerAt time.Time, interval time.Duration, f func(loop EventLoop, timerID int)) int
 
 	// cancel a timer, if it is removed successfully, returns true
 	// if the timer is already executed or the id is invalid, returns false
@@ -106,7 +110,7 @@ type EventLoop interface {
 	// go-reacotr users can ignore functions below
 
 	// when a channel is change, it is necessary to notify epollfd
-	UpdateChannelInLoopGoroutine(Channel)
+	RegisterChannelInLoopGoroutine(Channel)
 
 	// remove a channel from eventloop, the fd will also be remove from epollfd
 	RemoveChannelInLoopGoroutine(Channel)
@@ -142,8 +146,8 @@ func (ev *eventloop) DeleteContext(key string) {
 }
 
 // the function can be only triggered at eventloop goroutine
-func (ev *eventloop) UpdateChannelInLoopGoroutine(c Channel) {
-	ev.poller.UpdateChannel(c)
+func (ev *eventloop) RegisterChannelInLoopGoroutine(c Channel) {
+	ev.poller.RegisterChannel(c)
 }
 
 // the function can be only triggered at eventloop goroutine
@@ -232,7 +236,7 @@ func (ev *eventloop) GetChannelCount() int {
 }
 
 // setup a timer, returns its id, it can be cancelled, see CancelTimer(id int)
-func (ev *eventloop) RunAt(triggerAt time.Time, interval time.Duration, f func(timerID int)) int {
+func (ev *eventloop) RunAt(triggerAt time.Time, interval time.Duration, f func(loop EventLoop, timerID int)) int {
 	// ev.timerQueue can noly be operated in loop goroutine, we need to use RunInLoop
 	// and get its return value by golang channel
 	if getGid() == ev.gid {

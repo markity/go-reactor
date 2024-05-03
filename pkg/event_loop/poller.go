@@ -41,7 +41,7 @@ type Poller interface {
 	Poll() map[Channel]struct{}
 
 	// UpdateChannel calls epoll_ctl
-	UpdateChannel(Channel)
+	RegisterChannel(Channel)
 
 	// RemoveChannel removes a fd from epollfd
 	RemoveChannel(Channel)
@@ -147,13 +147,15 @@ retry:
 }
 
 // UpdateChannel calls epoll_ctl
-func (p *poller) UpdateChannel(c Channel) {
+func (p *poller) RegisterChannel(c Channel) {
 	// if index == -1, it is a new channel, assign a new index for it
 	if c.GetIndex() < 0 {
 		// assign an index
 		p.idxCounter++
 		p.channelMap[c.GetFD()] = c
 		c.SetIndex(p.idxCounter)
+	} else {
+		panic("re register, check channel")
 	}
 }
 
@@ -161,10 +163,6 @@ func (p *poller) UpdateChannel(c Channel) {
 func (p *poller) RemoveChannel(c Channel) {
 	if c.GetIndex() < 0 {
 		panic("remove non-exist channel")
-	}
-
-	if c.GetFD() == 6 {
-		fmt.Println("remove channel 6")
 	}
 
 	delete(p.channelMap, c.GetFD())

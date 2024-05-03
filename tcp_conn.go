@@ -110,17 +110,14 @@ func newConnection(loop eventloop.EventLoop, sockFD int, remoteAddrPort netip.Ad
 }
 
 func (conn *tcpConnection) Send(bs []byte) {
-	copyBs := make([]byte, len(bs))
-	copy(copyBs, bs)
 	conn.loop.RunInLoop(func() {
 		if conn.state == Connected {
-			conn.outputBuffer.Append(copyBs)
+			conn.outputBuffer.Append(bs)
 			if conn.hignWaterLevel != 0 && conn.outputBuffer.ReadableBytes() > conn.hignWaterLevel {
 				conn.highWaterCallback(conn, conn.outputBuffer.ReadableBytes())
 			}
 			if !conn.socketChannel.IsWriting() && !conn.socketChannel.IsWritePending() {
 				conn.socketChannel.EnableWrite(conn.outputBuffer.Peek())
-				conn.loop.UpdateChannelInLoopGoroutine(conn.socketChannel)
 			}
 		}
 	})
@@ -215,7 +212,7 @@ func (conn *tcpConnection) establishConn() {
 	}
 
 	conn.state = Connected
-	conn.loop.UpdateChannelInLoopGoroutine(conn.socketChannel)
+	conn.loop.RegisterChannelInLoopGoroutine(conn.socketChannel)
 	conn.connectedCallback(conn)
 }
 
