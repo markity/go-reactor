@@ -60,14 +60,6 @@ type userData struct {
 func (p *poller) Poll() map[Channel]struct{} {
 	inQueueNum := 0
 	for _, chIface := range p.channelMap {
-		if inQueueNum == 4096 {
-			n, err := p.uringFD.Submit()
-			if n != 4096 || err != nil {
-				panic(fmt.Sprintf("unexpected n=%v err=%v", n, err.Error()))
-			}
-			inQueueNum = 0
-		}
-
 		ch := chIface.(*channel)
 		if ch.IsReading() && !ch.IsReadPending() {
 			buf := make([]byte, 1024)
@@ -86,6 +78,7 @@ func (p *poller) Poll() map[Channel]struct{} {
 			} else {
 				err := p.uringFD.QueueSQE(uring.Read(uintptr(ch.GetFD()), buf, 0), 0, uint64(uintptr(unsafe.Pointer(uData))))
 				if err != nil {
+					fmt.Println(inQueueNum)
 					panic(err)
 				}
 			}
@@ -103,11 +96,19 @@ func (p *poller) Poll() map[Channel]struct{} {
 
 			err := p.uringFD.QueueSQE(uring.Write(uintptr(ch.GetFD()), ch.tobeWrite, 0), 0, uint64(uintptr(unsafe.Pointer(uData))))
 			if err != nil {
+				fmt.Println(inQueueNum)
 				panic(err)
 			}
 			inQueueNum++
 			ch.DisableWrite()
 			ch.EnableWritePending()
+		}
+		if inQueueNum >= 4094 {
+			n, err := p.uringFD.Submit()
+			if n != uint(inQueueNum) || err != nil {
+				panic(fmt.Sprintf("unexpected n=%v err=%v", n, err.Error()))
+			}
+			inQueueNum = 0
 		}
 	}
 
