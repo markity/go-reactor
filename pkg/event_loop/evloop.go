@@ -35,6 +35,8 @@ type eventloop struct {
 	ctx kvcontext.KVContext
 
 	doOnLoop func(EventLoop)
+
+	extraForReadFD []byte
 }
 
 // create an EventLoop, it's Loop function can be only triggered
@@ -78,6 +80,7 @@ func NewEventLoop() EventLoop {
 		gid:                getGid(),
 		id:                 int(idGen.Add(1)),
 		ctx:                kvcontext.NewContext(),
+		extraForReadFD:     make([]byte, 65536),
 	}
 
 	// register the channel into epoll
@@ -130,6 +133,13 @@ type EventLoop interface {
 
 	// be called when start loop
 	DoOnLoop(func(EventLoop))
+
+	// get extra data for readfd
+	GetExtraData() []byte
+}
+
+func (ev *eventloop) GetExtraData() []byte {
+	return ev.extraForReadFD
 }
 
 func (ev *eventloop) GetContext(key string) (interface{}, bool) {

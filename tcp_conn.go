@@ -111,7 +111,7 @@ func newConnection(loop eventloop.EventLoop, sockFD int, remoteAddrPort netip.Ad
 	}
 	channel.SetReadCallback(c.handleRead)
 	channel.SetWriteCallback(c.handleWrite)
-	channel.SetEvent(eventloop.CloseEvent | eventloop.ReadableEvent | eventloop.WritableEvent)
+	channel.SetEvent(eventloop.ReadableEvent | eventloop.WritableEvent)
 
 	return c
 }
@@ -175,10 +175,10 @@ func (conn *tcpConnection) SetNoDelay(b bool) {
 }
 
 func (conn *tcpConnection) handleRead() {
-	n := conn.inputBuffer.ReadFD(conn.socketChannel.GetFD())
+	n := conn.inputBuffer.ReadFD(conn.socketChannel.GetFD(), conn.GetEventLoop().GetExtraData())
 	if n > 0 {
 		conn.messageCallback(conn, conn.inputBuffer)
-	} else if n == 0 {
+	} else if n <= 0 {
 		// n为0意味对面已经close write或close total了, 此时直接关闭连接
 		conn.handleClose()
 	}

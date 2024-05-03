@@ -1,6 +1,8 @@
 package main
 
 import (
+	"runtime"
+
 	eventloop "github.com/markity/go-reactor/pkg/event_loop"
 
 	"github.com/markity/go-reactor/pkg/buffer"
@@ -10,7 +12,7 @@ import (
 
 func main() {
 	evloop := eventloop.NewEventLoop()
-	server := goreactor.NewTCPServer(evloop, "127.0.0.1:8000", 0, goreactor.RoundRobin())
+	server := goreactor.NewTCPServer(evloop, "127.0.0.1:8000", runtime.NumCPU(), goreactor.RoundRobin())
 	server.SetMessageCallback(func(t goreactor.TCPConnection, b buffer.Buffer) {
 		t.Send(b.Peek())
 		b.RetrieveAll()

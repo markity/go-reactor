@@ -11,8 +11,7 @@ const (
 	NoneEvent     ReactorEvent = 0
 	ReadableEvent ReactorEvent = syscall.EPOLLIN
 	WritableEvent ReactorEvent = syscall.EPOLLOUT
-	CloseEvent    ReactorEvent = syscall.EPOLLHUP
-	AllEvent      ReactorEvent = ReadableEvent | WritableEvent | CloseEvent
+	AllEvent      ReactorEvent = ReadableEvent | WritableEvent
 )
 
 type channel struct {

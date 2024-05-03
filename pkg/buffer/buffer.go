@@ -46,14 +46,12 @@ func (buf *buffer) Append(bs []byte) {
 	} else {
 		if len(buf.data) >= buf.writeIndex-buf.readIndex+len(bs) {
 			sz := buf.writeIndex - buf.readIndex + len(bs)
-			for i := 0; i < buf.writeIndex-buf.readIndex; i++ {
-				buf.data[i] = buf.data[buf.readIndex+i]
-			}
+			copy(buf.data, buf.data[buf.readIndex:buf.readIndex+buf.writeIndex-buf.readIndex])
 			copy(buf.data[buf.writeIndex-buf.readIndex:], bs)
 			buf.readIndex = 0
 			buf.writeIndex = sz
 		} else {
-			newBytes := make([]byte, buf.writeIndex-buf.readIndex+len(bs)+4096)
+			newBytes := make([]byte, buf.writeIndex-buf.readIndex+len(bs)+8192)
 			sz := buf.writeIndex - buf.readIndex + len(bs)
 			copy(newBytes, buf.data[buf.readIndex:buf.writeIndex])
 			copy(newBytes[buf.writeIndex:], bs)
@@ -64,9 +62,8 @@ func (buf *buffer) Append(bs []byte) {
 	}
 }
 
-func (buf *buffer) ReadFD(fd int) int {
+func (buf *buffer) ReadFD(fd int, extrabuf []byte) int {
 	writable := len(buf.data) - buf.writeIndex
-	extrabuf := make([]byte, 65536)
 	ptr := uintptr(unsafe.Pointer(&buf.data[buf.writeIndex]))
 	base := (*byte)(unsafe.Pointer(ptr))
 	iovec := [2]syscall.Iovec{
@@ -116,5 +113,5 @@ type Buffer interface {
 	RetrieveAll()
 	RetrieveAsString() string
 	Append([]byte)
-	ReadFD(int) int
+	ReadFD(int, []byte) int
 }
