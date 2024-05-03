@@ -78,22 +78,19 @@ func (ac *tcpAcceptor) Listen() error {
 	}
 
 	ac.listening = true
-	ac.socketChannel.EnableRead()
+	ac.socketChannel.EnableRead(true)
 	ac.loop.UpdateChannelInLoopGoroutine(ac.socketChannel)
 	return nil
 }
 
-func (ac *tcpAcceptor) HandleRead() {
-	nfd, addr, err := syscall.Accept(ac.socketChannel.GetFD())
-	if err != nil {
-		panic(err)
-	}
+func (ac *tcpAcceptor) HandleRead(bs []byte, res int) {
+	ac.socketChannel.DisableReadPending()
 
 	if ac.newConnectionCallback != nil {
-		sockaddr := addr.(*syscall.SockaddrInet4)
-		addrPort := netip.AddrPortFrom(netip.AddrFrom4(sockaddr.Addr), uint16(sockaddr.Port))
-		ac.newConnectionCallback(nfd, addrPort)
+		ac.newConnectionCallback(res, netip.AddrPort{})
 	}
+
+	ac.socketChannel.EnableRead(true)
 }
 
 func (ac *tcpAcceptor) SetNewConnectionCallback(cb newConnectionCallback) {

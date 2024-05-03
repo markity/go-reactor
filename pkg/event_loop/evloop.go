@@ -52,22 +52,11 @@ func NewEventLoop() EventLoop {
 		panic(errno)
 	}
 
-	// to make sure syscall.Read(eventfd) will not block, it is not necessary actually,
-	// but sometimes the user may misread our eventfd by mistake, after witch reading
-	// eventfd will make the loop goroutine block
-	err := syscall.SetNonblock(int(r1), true)
-	if err != nil {
-		panic(err)
-	}
-
 	// create a channel for eventfd
 	c := NewChannel(int(r1))
-	c.SetEvent(ReadableEvent)
-	c.SetReadCallback(func() {
-		_, err := syscall.Read(int(r1), make([]byte, 8))
-		if err != nil {
-			panic(err)
-		}
+	c.EnableRead(false)
+	c.SetReadCallback(func([]byte, int) {
+		c.EnableRead(false)
 	})
 
 	ev := &eventloop{
@@ -185,7 +174,7 @@ func (ev *eventloop) Loop() {
 		channels := ev.poller.Poll()
 
 		// execute functions for each channel
-		for _, v := range channels {
+		for v := range channels {
 			v.HandleEvent()
 		}
 

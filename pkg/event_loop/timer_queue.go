@@ -69,13 +69,9 @@ type timerQueue struct {
 
 func newTimerQueue(loop EventLoop) *timerQueue {
 	// 1 means CLOCK_MONOTONIC, see timerfd_create(2)
-	timerfd, _, errno := syscall.Syscall(syscall.SYS_TIMERFD_CREATE, 1, syscall.O_NONBLOCK, 0)
+	timerfd, _, errno := syscall.Syscall(syscall.SYS_TIMERFD_CREATE, 1, 0, 0)
 	if errno != 0 {
 		panic(errno)
-	}
-	err := syscall.SetNonblock(int(timerfd), true)
-	if err != nil {
-		panic(err)
 	}
 
 	ch := NewChannel(int(timerfd))
@@ -90,15 +86,11 @@ func newTimerQueue(loop EventLoop) *timerQueue {
 	loop.UpdateChannelInLoopGoroutine(ch)
 
 	// read callback consumes content in timerfd and call getExpired() to execute callbakcs
-	ch.SetReadCallback(func() {
-		_, err := syscall.Read(int(timerfd), make([]byte, 8))
-		if err != nil {
-			panic(err)
-		}
-
+	ch.SetReadCallback(func([]byte, int) {
 		for _, v := range tq.getExpired() {
 			v.onTimer(v.timerId)
 		}
+		ch.EnableRead(false)
 	})
 
 	return &tq

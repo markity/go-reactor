@@ -38,8 +38,6 @@ type TCPConnection interface {
 	IsConnected() bool
 }
 
-type closeCallbackFunc func(TCPConnection)
-
 // 能被多个协程share
 type tcpConnection struct {
 	state tcpConnectionState
@@ -50,7 +48,6 @@ type tcpConnection struct {
 
 	connectedCallback     ConnectedCallbackFunc
 	disconnectedCallback  DisConnectedCallbackFunc
-	closeCallback         closeCallbackFunc
 	messageCallback       MessageCallbackFunc
 	highWaterCallback     HighWaterCallbackFunc
 	writeCompleteCallback WriteCompleteCallbackFunc
@@ -68,10 +65,6 @@ type tcpConnection struct {
 
 func (tc *tcpConnection) setConnectedCallback(f ConnectedCallbackFunc) {
 	tc.connectedCallback = f
-}
-
-func (tc *tcpConnection) setCloseCallback(f closeCallbackFunc) {
-	tc.closeCallback = f
 }
 
 func (tc *tcpConnection) setMessageCallback(f MessageCallbackFunc) {
@@ -111,7 +104,7 @@ func newConnection(loop eventloop.EventLoop, sockFD int, remoteAddrPort netip.Ad
 	}
 	channel.SetReadCallback(c.handleRead)
 	channel.SetWriteCallback(c.handleWrite)
-	channel.SetEvent(eventloop.CloseEvent | eventloop.ReadableEvent | eventloop.WritableEvent)
+	channel.EnableRead(false)
 
 	return c
 }
@@ -125,8 +118,8 @@ func (conn *tcpConnection) Send(bs []byte) {
 			if conn.hignWaterLevel != 0 && conn.outputBuffer.ReadableBytes() > conn.hignWaterLevel {
 				conn.highWaterCallback(conn, conn.outputBuffer.ReadableBytes())
 			}
-			if !conn.socketChannel.IsWriting() {
-				conn.socketChannel.EnableWrite()
+			if !conn.socketChannel.IsWriting() && !conn.socketChannel.IsWritePending() {
+				conn.socketChannel.EnableWrite(conn.outputBuffer.Peek())
 				conn.loop.UpdateChannelInLoopGoroutine(conn.socketChannel)
 			}
 		}
@@ -176,27 +169,31 @@ func (conn *tcpConnection) SetNoDelay(b bool) {
 	})
 }
 
-func (conn *tcpConnection) handleRead() {
-	n := conn.inputBuffer.ReadFD(conn.socketChannel.GetFD())
-	if n > 0 {
+func (conn *tcpConnection) handleRead(bs []byte, res int) {
+	conn.socketChannel.DisableReadPending()
+
+	if res > 0 {
+		data := bs[:res]
+		conn.inputBuffer.Append(data)
 		conn.messageCallback(conn, conn.inputBuffer)
-	} else if n == 0 {
+		conn.socketChannel.EnableRead(false)
+	} else if res <= 0 {
 		// n为0意味对面已经close write或close total了, 此时直接关闭连接
 		conn.handleClose()
 	}
 }
 
-func (conn *tcpConnection) handleWrite() {
-	n, _ := syscall.Write(conn.socketChannel.GetFD(), conn.outputBuffer.Peek()[:conn.outputBuffer.ReadableBytes()])
+func (conn *tcpConnection) handleWrite(n int) {
+	conn.socketChannel.DisableWritePending()
+
 	conn.outputBuffer.Retrieve(n)
 	if conn.outputBuffer.ReadableBytes() == 0 {
-		conn.socketChannel.DisableWrite()
-		conn.loop.UpdateChannelInLoopGoroutine(conn.socketChannel)
-
 		conn.writeCompleteCallback(conn)
 		if conn.state == Disconnecting {
 			syscall.Shutdown(conn.socketChannel.GetFD(), syscall.SHUT_WR)
 		}
+	} else {
+		conn.socketChannel.EnableWrite(conn.outputBuffer.Peek())
 	}
 }
 
@@ -209,7 +206,6 @@ func (conn *tcpConnection) handleClose() {
 	conn.state = Disconnected
 	conn.loop.RemoveChannelInLoopGoroutine(conn.socketChannel)
 	syscall.Close(conn.socketChannel.GetFD())
-	conn.closeCallback(conn)
 	conn.disconnectedCallback(conn)
 }
 

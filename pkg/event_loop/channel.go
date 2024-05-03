@@ -1,39 +1,42 @@
 package eventloop
 
-import (
-	"syscall"
-)
-
 type ReactorEvent int
 
 const (
 	// do not care about anything
 	NoneEvent     ReactorEvent = 0
-	ReadableEvent ReactorEvent = syscall.EPOLLIN
-	WritableEvent ReactorEvent = syscall.EPOLLOUT
-	CloseEvent    ReactorEvent = syscall.EPOLLHUP
-	AllEvent      ReactorEvent = ReadableEvent | WritableEvent | CloseEvent
+	ReadableEvent ReactorEvent = 0b1
+	WritableEvent ReactorEvent = 0b10
+	AllEvent      ReactorEvent = ReadableEvent | WritableEvent
 )
 
 type channel struct {
-	// file descripor, each channel is used only for handle one fd
+	//  file descripor, each channel is used only to handle one fd
 	fd int
 
 	// events that we are interested, if we want to do something when the fd
 	// is readable, we need to set events to ReadableEvent and SetReadCallback
-	events ReactorEvent
+	events    ReactorEvent
+	tobeWrite []byte
+	// is isAccept is true, use uring.Accept instead of uring.Read
+	isAccept bool
 
-	// revents tells what events are active, for example, after the fd is readable
-	// poller.Poll() returns the channel with (revents & ReadableEvent == 1)
-	revents ReactorEvent
+	revents                ReactorEvent
+	handleEventReadCbData1 []byte
+	handleEventReadCbData2 int
+
+	writePending bool // write op submitted
+	readPending  bool // read op submitted
+
+	handleEventWriteCbData int
 
 	// used by poller, if index is zero, the poller knows it is a new channel,
 	// and poller will set a index for the channel
 	index int
 
 	// callbacks
-	readCallback  func()
-	writeCallback func()
+	readCallback  func([]byte, int)
+	writeCallback func(int)
 }
 
 // some setters and getters
@@ -46,12 +49,23 @@ func (c *channel) SetEvent(e ReactorEvent) {
 	c.events = e
 }
 
-func (c *channel) GetRevent() ReactorEvent {
-	return c.revents
+func (c *channel) IsWritePending() bool {
+	return c.writePending
 }
 
-func (c *channel) SetRevent(e ReactorEvent) {
-	c.revents = e
+func (c *channel) IsReadPending() bool {
+	return c.readPending
+}
+
+func (c *channel) EnableReventRead(bs []byte, res int) {
+	c.revents |= ReadableEvent
+	c.handleEventReadCbData1 = bs
+	c.handleEventReadCbData2 = res
+}
+
+func (c *channel) EnableReventWrite(d int) {
+	c.revents |= WritableEvent
+	c.handleEventWriteCbData = d
 }
 
 func (c *channel) GetIndex() int {
@@ -66,11 +80,11 @@ func (c *channel) GetFD() int {
 	return c.fd
 }
 
-func (c *channel) SetReadCallback(f func()) {
+func (c *channel) SetReadCallback(f func([]byte, int)) {
 	c.readCallback = f
 }
 
-func (c *channel) SetWriteCallback(f func()) {
+func (c *channel) SetWriteCallback(f func(int)) {
 	c.writeCallback = f
 }
 
@@ -86,12 +100,13 @@ func (c *channel) IsReading() bool {
 // returns false, it is used for better performance, when we call EnableWrite() with
 // false returns, we do not need to call eventloop.UpdateChannelInLoopGoroutine, this
 // save the cost of the epoll_ctl system call
-func (c *channel) EnableWrite() bool {
+func (c *channel) EnableWrite(bs []byte) bool {
 	if c.events&WritableEvent != 0 {
 		return false
 	}
 
 	c.events |= WritableEvent
+	c.tobeWrite = bs
 	return true
 }
 
@@ -107,12 +122,13 @@ func (c *channel) DisableWrite() bool {
 }
 
 // enable read
-func (c *channel) EnableRead() bool {
+func (c *channel) EnableRead(isAccept bool) bool {
 	if c.events&ReadableEvent != 0 {
 		return false
 	}
 
 	c.events |= ReadableEvent
+	c.isAccept = isAccept
 	return true
 }
 
@@ -132,15 +148,33 @@ func (c *channel) HandleEvent() {
 
 	if c.revents&ReadableEvent != 0 {
 		if c.readCallback != nil {
-			c.readCallback()
+			c.readCallback(c.handleEventReadCbData1, c.handleEventReadCbData2)
 		}
 	}
 
 	if c.revents&WritableEvent != 0 {
 		if c.writeCallback != nil {
-			c.writeCallback()
+			c.writeCallback(c.handleEventWriteCbData)
 		}
 	}
+
+	c.revents = 0
+}
+
+func (c *channel) EnableWritePending() {
+	c.writePending = true
+}
+
+func (c *channel) DisableWritePending() {
+	c.writePending = false
+}
+
+func (c *channel) EnableReadPending() {
+	c.readPending = true
+}
+
+func (c *channel) DisableReadPending() {
+	c.readPending = false
 }
 
 // create a new channel
@@ -156,23 +190,28 @@ type Channel interface {
 	GetEvent() ReactorEvent
 	SetEvent(ReactorEvent)
 
-	GetRevent() ReactorEvent
-	SetRevent(ReactorEvent)
-
 	GetIndex() int
 	SetIndex(int)
 
 	GetFD() int
 
-	SetReadCallback(func())
-	SetWriteCallback(func())
+	SetReadCallback(func([]byte, int))
+	SetWriteCallback(func(int))
 
 	HandleEvent()
 
 	IsWriting() bool
 	IsReading() bool
-	EnableWrite() bool
+	EnableWrite([]byte) bool
 	DisableWrite() bool
-	EnableRead() bool
+	EnableRead(isAccept bool) bool
 	DisableRead() bool
+
+	IsWritePending() bool
+	IsReadPending() bool
+
+	EnableWritePending()
+	DisableWritePending()
+	EnableReadPending()
+	DisableReadPending()
 }

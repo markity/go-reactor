@@ -1,43 +1,44 @@
 package eventloop
 
 import (
-	"errors"
-	"syscall"
+	"fmt"
+	"unsafe"
+
+	"github.com/godzie44/go-uring/uring"
 )
 
 type poller struct {
-	// epoll file descriptor
-	epollFD int
+	// uring file descriptor
+	uringFD *uring.Ring
 
 	// key is fd, value is Channel
 	channelMap map[int]Channel
 
-	// params of epoll_wait, it can expand if one epoll_wait syscall fills up this array
-	eventList []syscall.EpollEvent
-
 	// for each channel, assign a index, the first index is 1
 	idxCounter int
+
+	// store userdatas, prevent gc
+	userDatas map[*userData]struct{}
 }
 
 // create a new poller, poller contains a epollfd,
 func NewPoller() Poller {
-	// size is ignored since linux 2.6.8, see man epoll_create(2)
-	fd, err := syscall.EpollCreate(1)
+	ring, err := uring.New(4096)
 	if err != nil {
 		panic(err)
 	}
 
 	return &poller{
-		epollFD:    fd,
+		uringFD:    ring,
 		channelMap: make(map[int]Channel),
-		eventList:  make([]syscall.EpollEvent, 128),
 		idxCounter: 0,
+		userDatas:  make(map[*userData]struct{}),
 	}
 }
 
 type Poller interface {
 	// wait on epoll_wait and returns the active Channels
-	Poll() []Channel
+	Poll() map[Channel]struct{}
 
 	// UpdateChannel calls epoll_ctl
 	UpdateChannel(Channel)
@@ -49,37 +50,97 @@ type Poller interface {
 	GetChannelCount() int
 }
 
-// wait on epoll_wait and returns the active Channels
-func (p *poller) Poll() []Channel {
-	var n int
+type userData struct {
+	fd      int
+	op      ReactorEvent // op is ReadableEvent or WritableEvent
+	readBuf []byte       // for read
+}
 
-	for {
-		var err error
-		n, err = syscall.EpollWait(p.epollFD, p.eventList, -1)
-		if err != nil {
-			// golang send signals to implement signal preemption even if we are blocking
-			// on syscall, it is necessary to distingulish the error
-			if errors.Is(err, syscall.EINTR) {
-				continue
+// wait on epoll_wait and returns the active Channels
+func (p *poller) Poll() map[Channel]struct{} {
+	inQueueNum := 0
+	for _, chIface := range p.channelMap {
+		if inQueueNum == 4096 {
+			n, err := p.uringFD.Submit()
+			if n != 4096 || err != nil {
+				panic(fmt.Sprintf("unexpected n=%v err=%v", n, err.Error()))
 			}
-			panic(err)
+			inQueueNum = 0
 		}
-		break
+
+		ch := chIface.(*channel)
+		if ch.IsReading() && !ch.IsReadPending() {
+			buf := make([]byte, 1024)
+			uData := &userData{
+				fd:      ch.GetFD(),
+				op:      ReadableEvent,
+				readBuf: buf,
+			}
+			p.userDatas[uData] = struct{}{}
+
+			if ch.isAccept {
+				err := p.uringFD.QueueSQE(uring.Accept(uintptr(ch.GetFD()), 0), 0, uint64(uintptr(unsafe.Pointer(uData))))
+				if err != nil {
+					panic(err)
+				}
+			} else {
+				err := p.uringFD.QueueSQE(uring.Read(uintptr(ch.GetFD()), buf, 0), 0, uint64(uintptr(unsafe.Pointer(uData))))
+				if err != nil {
+					panic(err)
+				}
+			}
+			inQueueNum++
+			ch.DisableRead()
+			ch.EnableReadPending()
+		}
+		if ch.IsWriting() && !ch.IsWritePending() {
+			uData := &userData{
+				fd:      ch.GetFD(),
+				op:      WritableEvent,
+				readBuf: nil, // do not need read buf
+			}
+			p.userDatas[uData] = struct{}{}
+
+			err := p.uringFD.QueueSQE(uring.Write(uintptr(ch.GetFD()), ch.tobeWrite, 0), 0, uint64(uintptr(unsafe.Pointer(uData))))
+			if err != nil {
+				panic(err)
+			}
+			inQueueNum++
+			ch.DisableWrite()
+			ch.EnableWritePending()
+		}
 	}
+
+	_, err := p.uringFD.Submit()
+	if err != nil {
+		panic(err)
+	}
+
+retry:
+	_, err = p.uringFD.WaitCQEvents(1)
+	if err != nil {
+		goto retry
+	}
+	resultCQEvents := make([]*uring.CQEvent, 4096)
+	n := p.uringFD.PeekCQEventBatch(resultCQEvents)
 
 	// fill up active channels
-	c := make([]Channel, 0)
-	if n > 0 {
-		for i := 0; i < n; i++ {
-			ch := p.channelMap[int(p.eventList[i].Fd)]
-			ch.SetRevent(ReactorEvent(p.eventList[i].Events))
-			c = append(c, p.channelMap[int(p.eventList[i].Fd)])
+	c := make(map[Channel]struct{})
+	for i := 0; i < n; i++ {
+		cqe := resultCQEvents[i]
+		p.uringFD.SeenCQE(cqe)
+		uData := (*userData)(unsafe.Pointer(uintptr(cqe.UserData)))
+		ch, ok := p.channelMap[uData.fd].(*channel)
+		if ok {
+			switch uData.op {
+			case ReadableEvent:
+				ch.EnableReventRead(uData.readBuf, int(cqe.Res))
+			case WritableEvent:
+				ch.EnableReventWrite(int(cqe.Res))
+			}
+			c[ch] = struct{}{}
 		}
-	}
-
-	// if eventList is full, expand the array
-	if n == len(p.eventList) {
-		p.eventList = make([]syscall.EpollEvent, 2*len(p.eventList))
+		delete(p.userDatas, uData)
 	}
 
 	return c
@@ -89,28 +150,10 @@ func (p *poller) Poll() []Channel {
 func (p *poller) UpdateChannel(c Channel) {
 	// if index == -1, it is a new channel, assign a new index for it
 	if c.GetIndex() < 0 {
-		// register fd into epollfd
-		err := syscall.EpollCtl(p.epollFD, syscall.EPOLL_CTL_ADD, c.GetFD(), &syscall.EpollEvent{
-			Events: uint32(c.GetEvent()),
-			Fd:     int32(c.GetFD()),
-		})
-		if err != nil {
-			panic(err)
-		}
-
 		// assign an index
 		p.idxCounter++
 		p.channelMap[c.GetFD()] = c
 		c.SetIndex(p.idxCounter)
-	} else {
-		// channel exists, now just modify epollfd
-		err := syscall.EpollCtl(p.epollFD, syscall.EPOLL_CTL_MOD, c.GetFD(), &syscall.EpollEvent{
-			Events: uint32(c.GetEvent()),
-			Fd:     int32(c.GetFD()),
-		})
-		if err != nil {
-			panic(err)
-		}
 	}
 }
 
@@ -120,9 +163,8 @@ func (p *poller) RemoveChannel(c Channel) {
 		panic("remove non-exist channel")
 	}
 
-	err := syscall.EpollCtl(p.epollFD, syscall.EPOLL_CTL_DEL, c.GetFD(), nil)
-	if err != nil {
-		panic(err)
+	if c.GetFD() == 6 {
+		fmt.Println("remove channel 6")
 	}
 
 	delete(p.channelMap, c.GetFD())

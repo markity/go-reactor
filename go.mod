@@ -4,6 +4,7 @@ go 1.21.1
 
 require (
 	github.com/Allenxuxu/gev v0.5.0
+	github.com/godzie44/go-uring v0.0.0-20220926161041-69611e8b13d5
 	github.com/markity/Interactive-Console v0.0.0-20230622112502-6658419229ed
 	github.com/tidwall/evio v1.0.8
 )
@@ -16,6 +17,7 @@ require (
 	github.com/gdamore/tcell v1.4.0 // indirect
 	github.com/kavu/go_reuseport v1.5.0 // indirect
 	github.com/libp2p/go-reuseport v0.0.1 // indirect
+	github.com/libp2p/go-sockaddr v0.1.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
