@@ -66,9 +66,6 @@ func (server *tcpServer) onNewConnection(socketfd int, peerAddr netip.AddrPort) 
 
 	conn := newConnection(loop, socketfd, peerAddr)
 	conn.setConnectedCallback(server.connectedCallback)
-	conn.setCloseCallback(func(t TCPConnection) {
-		// just do nothing
-	})
 	conn.setMessageCallback(server.msgCallback)
 
 	loop.RunInLoop(func() {

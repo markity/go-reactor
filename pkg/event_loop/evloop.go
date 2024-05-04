@@ -27,15 +27,19 @@ type eventloop struct {
 	// be used to stop eventloop, make eventloop.Loop returns
 	running int64
 
-	// gid is goroutine id, be set when NewEventLoop
-	gid uint64
+	// gid is goroutine id, set when event loop calls Loop
+	gid int64
 
+	// echo eventloop has a id
 	id int
 
+	// eventloop level kv
 	ctx kvcontext.KVContext
 
+	// functions execute when loop startup
 	doOnLoop func(EventLoop)
 
+	// eacho loop has a big space for fd readv(iovec)
 	extraForReadFD []byte
 }
 
@@ -77,7 +81,6 @@ func NewEventLoop() EventLoop {
 		wakeupEventChannel: c,
 		functors:           make([]func(), 0),
 		running:            0,
-		gid:                getGid(),
 		id:                 int(idGen.Add(1)),
 		ctx:                kvcontext.NewContext(),
 		extraForReadFD:     make([]byte, 65536),

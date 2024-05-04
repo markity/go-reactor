@@ -38,8 +38,6 @@ type TCPConnection interface {
 	IsConnected() bool
 }
 
-type closeCallbackFunc func(TCPConnection)
-
 // 能被多个协程share
 type tcpConnection struct {
 	state tcpConnectionState
@@ -50,7 +48,6 @@ type tcpConnection struct {
 
 	connectedCallback     ConnectedCallbackFunc
 	disconnectedCallback  DisConnectedCallbackFunc
-	closeCallback         closeCallbackFunc
 	messageCallback       MessageCallbackFunc
 	highWaterCallback     HighWaterCallbackFunc
 	writeCompleteCallback WriteCompleteCallbackFunc
@@ -68,10 +65,6 @@ type tcpConnection struct {
 
 func (tc *tcpConnection) setConnectedCallback(f ConnectedCallbackFunc) {
 	tc.connectedCallback = f
-}
-
-func (tc *tcpConnection) setCloseCallback(f closeCallbackFunc) {
-	tc.closeCallback = f
 }
 
 func (tc *tcpConnection) setMessageCallback(f MessageCallbackFunc) {
@@ -207,7 +200,6 @@ func (conn *tcpConnection) handleClose() {
 	conn.state = Disconnected
 	conn.loop.RemoveChannelInLoopGoroutine(conn.socketChannel)
 	syscall.Close(conn.socketChannel.GetFD())
-	conn.closeCallback(conn)
 	conn.disconnectedCallback(conn)
 }
 
