@@ -6,6 +6,7 @@ require (
 	github.com/Allenxuxu/gev v0.5.0
 	github.com/godzie44/go-uring v0.0.0-20220926161041-69611e8b13d5
 	github.com/markity/Interactive-Console v0.0.0-20230622112502-6658419229ed
+	github.com/petermattis/goid v0.0.0-20240503122002-4b96552b8156
 	github.com/tidwall/evio v1.0.8
 )
 

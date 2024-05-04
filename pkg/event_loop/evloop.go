@@ -27,8 +27,8 @@ type eventloop struct {
 	// be used to stop eventloop, make eventloop.Loop returns
 	running int64
 
-	// gid is goroutine id, be set when NewEventLoop
-	gid uint64
+	// gid is goroutine id, be set when Loop
+	gid int64
 
 	// each eventloop contains a id, be assigned automatically
 	id int
@@ -68,7 +68,6 @@ func NewEventLoop() EventLoop {
 		wakeupEventChannel: c,
 		functors:           make([]func(), 0),
 		running:            0,
-		gid:                getGid(),
 		id:                 int(idGen.Add(1)),
 		ctx:                kvcontext.NewContext(),
 	}
