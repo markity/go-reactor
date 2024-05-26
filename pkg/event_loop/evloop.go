@@ -39,6 +39,9 @@ type eventloop struct {
 	// functions execute when loop startup
 	doOnLoop func(EventLoop)
 
+	// functions execute when loop stops
+	doOnStop func(EventLoop)
+
 	// eacho loop has a big space for fd readv(iovec)
 	extraForReadFD []byte
 }
@@ -137,6 +140,9 @@ type EventLoop interface {
 	// be called when start loop
 	DoOnLoop(func(EventLoop))
 
+	// be called when stops loop
+	DoOnStop(func(EventLoop))
+
 	// get extra data for readfd
 	GetExtraData() []byte
 }
@@ -179,6 +185,10 @@ func (ev *eventloop) DoOnLoop(f func(EventLoop)) {
 	ev.doOnLoop = f
 }
 
+func (ev *eventloop) DoOnStop(f func(EventLoop)) {
+	ev.doOnStop = f
+}
+
 // start event loop, if Stop() is not called, Loop() will never return
 func (ev *eventloop) Loop() {
 	// atomic operation, make running switch 0 to 1
@@ -213,6 +223,8 @@ func (ev *eventloop) Loop() {
 			v()
 		}
 	}
+
+	ev.doOnStop(ev)
 }
 
 // queue a functor into a loop, func will be called in the loop goroutine later
